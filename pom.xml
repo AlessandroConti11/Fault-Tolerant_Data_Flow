@@ -18,9 +18,9 @@
 
   <dependencies>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>3.8.1</version>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>RELEASE</version>
       <scope>test</scope>
     </dependency>
   
@@ -30,7 +30,18 @@
       <version>3.21.12</version>
     </dependency>
 
-    </dependencies>
+    <dependency>
+      <groupId>org.javatuples</groupId>
+      <artifactId>javatuples</artifactId>
+      <version>1.2</version>
+    </dependency>
+
+    <dependency>
+        <groupId>io.github.cdimascio</groupId>
+        <artifactId>dotenv-java</artifactId>
+        <version>3.0.0</version>
+    </dependency>
+  </dependencies>
 
   <build>
     <pluginManagement>
@@ -71,17 +82,88 @@
               </configuration>
             </execution>
 
+            <execution>
+              <id>workers</id>
+              <goals>
+                <goal>java</goal>
+              </goals>
+              <configuration>
+                <mainClass>it.polimi.ds.WorkerManager</mainClass>
+              </configuration>
+            </execution>
+
+            <execution>
+              <id>coord</id>
+              <goals>
+                <goal>java</goal>
+              </goals>
+              <configuration>
+                <mainClass>it.polimi.ds.Coordinator</mainClass>
+              </configuration>
+            </execution>
+
           </executions>
         </plugin>
+      </plugins>
+      </pluginManagement>
+    <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
           <version>3.6.0</version>
-            <executions>
+          <executions>
+
+              <execution>
+              <id>coord</id>
+              <phase>package</phase>
+
+                <goals>
+                  <goal>single</goal>
+                </goals>
+                <configuration>
+                  <finalName>coordinator</finalName>
+                  <archive>
+                    <manifest>
+                      <mainClass>
+                        it.polimi.ds.Coordinator
+                      </mainClass>
+                    </manifest>
+                  </archive>
+                  <descriptorRefs>
+                    <descriptorRef>jar-with-dependencies</descriptorRef>
+                  </descriptorRefs>
+                  <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+
+              </execution>
+
+              <execution>
+              <id>workers</id>
+              <phase>package</phase>
+
+                <goals>
+                  <goal>single</goal>
+                </goals>
+                <configuration>
+                  <finalName>workers</finalName>
+                  <archive>
+                    <manifest>
+                      <mainClass>
+                        it.polimi.ds.WorkerManager
+                      </mainClass>
+                    </manifest>
+                  </archive>
+                  <descriptorRefs>
+                    <descriptorRef>jar-with-dependencies</descriptorRef>
+                  </descriptorRefs>
+                  <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+
+              </execution>
+
 
             </executions>
           </plugin>
-      </plugins>
-    </pluginManagement>
+    </plugins>
   </build>
 </project>

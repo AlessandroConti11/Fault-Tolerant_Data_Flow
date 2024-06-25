@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "it.polimi.ds.proto";
+
+message ProtoAddress {
+  string ip = 1;
+  int32 mask = 3;
+  int32 port = 2;
+}

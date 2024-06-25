@@ -24,6 +24,16 @@ public class Node {
         }
     }
 
+    public Node(Address address) {
+        try {
+            this.conn = new Socket(address.getHost(), address.getPort());
+            this.out = conn.getOutputStream();
+            this.in = conn.getInputStream();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public void send(GeneratedMessageV3 message) throws IOException {
         message.writeDelimitedTo(out);
     }

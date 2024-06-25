@@ -3,6 +3,17 @@ syntax = "proto3";
 option java_multiple_files = true;
 option java_package = "it.polimi.ds.proto";
 
-message AllocateNodeManagerRequest { int32 count = 1; }
+import "addr.proto";
 
-message AllocateNodeManagerResponse {}
+message AllocateNodeManagerRequest {
+  oneof message {
+    bool coordinator = 1;
+    NodeManagerInfo nodeManagerInfo = 2;
+  }
+}
+message NodeManagerInfo {
+  ProtoAddress address = 1;
+  int32 numContainers = 2;
+}
+
+message AllocateNodeManagerResponse { optional ProtoAddress address = 1; }
