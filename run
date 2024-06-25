@@ -1,0 +1,52 @@
+#!/bin/sh
+if [ -z "$1" ]; then
+  echo "Usage: $0 <host|client|proto>"
+  exit 1
+fi
+
+if [ "$1" = "proto" ]; then
+  mvn exec:exec@proto
+  exit 0
+fi 
+
+# Define directory to monitor (change this to your desired directory)
+DIR_TO_CHECK="./src"
+# File to store timestamps
+TIMESTAMP_FILE=".last_check"
+
+# Check if timestamp file exists
+if [ ! -f "$TIMESTAMP_FILE" ]; then
+  touch "$TIMESTAMP_FILE"
+fi
+
+# Get the last modification time of all files in the directory
+CURRENT_MOD_TIME=$(find "$DIR_TO_CHECK" -type f -print0 | xargs -0 stat -c %y)
+LAST_MOD_TIME=$(cat "$TIMESTAMP_FILE")
+
+# Compare the modification times
+if [ "$CURRENT_MOD_TIME" != "$LAST_MOD_TIME" ]; then
+	mvn compile
+fi
+
+# Update the timestamp file with the current time
+echo "$CURRENT_MOD_TIME" > "$TIMESTAMP_FILE"
+
+comm=$1
+
+shift
+
+# Append remaining arguments (if any) to a string using a loop
+all_others=""
+for arg in "$@"
+do
+	all_others="$all_others $arg"
+done
+
+if [ $comm = "host" ]; then
+  mvn exec:java@host -Dexec.args="$all_others"
+elif [ $comm = "client" ]; then
+  mvn exec:java@client -Dexec.args="$all_others"
+else
+  echo "Usage: $0 <host|client|proto>"
+  exit 1
+fi

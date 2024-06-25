@@ -1,0 +1,47 @@
+package it.polimi.ds;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.net.Socket;
+
+import com.google.protobuf.GeneratedMessageV3;
+
+public class Node {
+    private Socket conn;
+
+    private OutputStream out;
+    private InputStream in;
+
+    public Node(Socket socket) {
+        this.conn = socket;
+        try {
+            this.out = socket.getOutputStream();
+            this.in = socket.getInputStream();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void send(GeneratedMessageV3 message) throws IOException {
+        message.writeDelimitedTo(out);
+    }
+
+    public <T extends GeneratedMessageV3> T receive(Class<T> clazz) throws IOException {
+        T t = null;
+        try {
+            t = (T) clazz.getMethod("parseDelimitedFrom", InputStream.class).invoke(null, in);
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
+            // Unreachable
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return t;
+    }
+
+    public void close() throws IOException {
+        conn.close();
+    }
+}

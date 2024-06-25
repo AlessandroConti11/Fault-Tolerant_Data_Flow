@@ -12,6 +12,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>19</maven.compiler.source>
+    <maven.compiler.target>19</maven.compiler.target>
   </properties>
 
   <dependencies>
@@ -21,5 +23,65 @@
       <version>3.8.1</version>
       <scope>test</scope>
     </dependency>
-  </dependencies>
+  
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>3.21.12</version>
+    </dependency>
+
+    </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>3.1.1</version>
+          <executions>
+
+            <execution>
+              <id>proto</id>
+              <goals>
+                <goal>exec</goal>
+              </goals>
+              <configuration>
+                <executable>generateProto</executable>
+              </configuration>
+            </execution>
+
+            <execution>
+              <id>host</id>
+              <goals>
+                <goal>java</goal>
+              </goals>
+              <configuration>
+                <mainClass>it.polimi.ds.Host</mainClass>
+              </configuration>
+            </execution>
+
+            <execution>
+              <id>client</id>
+              <goals>
+                <goal>java</goal>
+              </goals>
+              <configuration>
+                <mainClass>it.polimi.ds.Client</mainClass>
+              </configuration>
+            </execution>
+
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-assembly-plugin</artifactId>
+          <version>3.6.0</version>
+            <executions>
+
+            </executions>
+          </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
 </project>

@@ -1,0 +1,6 @@
+#!/bin/sh
+
+rm -rf ./src/main/java/it/polimi/ds/proto/
+echo "Generating proto files..."
+
+protoc -I=./src/main/proto --java_out=./src/main/java ./src/main/proto/*.proto
