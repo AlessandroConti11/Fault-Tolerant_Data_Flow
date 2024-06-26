@@ -13,3 +13,17 @@ message AllocationResponse {}
 
 message DataRequest {}
 message DataResponse {}
+
+message CheckpointRequest {
+  int64 task_id = 1;
+  bytes data = 2;
+}
+
+message CheckpointResponse {}
+
+message RegisterNodeManagerRequest {
+  ProtoAddress address = 1;
+  int32 task_slots = 2;
+}
+
+message RegisterNodeManagerResponse { int64 id = 1; }
