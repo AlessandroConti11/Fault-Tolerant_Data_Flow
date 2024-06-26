@@ -51,10 +51,13 @@ public class Node {
         T t = null;
         try {
             t = (T) clazz.getMethod("parseDelimitedFrom", InputStream.class).invoke(null, in);
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
+        } catch (IllegalAccessException | NoSuchMethodException | SecurityException e) {
+            System.err.println("Error while parsing message -- " + clazz.getName() + " -- " + e.getMessage());
             // Unreachable
             e.printStackTrace();
             System.exit(1);
+        } catch (InvocationTargetException e) {
+            throw (IOException) e.getCause();
         }
 
         return t;

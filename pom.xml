@@ -87,12 +87,12 @@
             </execution>
 
             <execution>
-              <id>host</id>
+              <id>alloc</id>
               <goals>
                 <goal>java</goal>
               </goals>
               <configuration>
-                <mainClass>it.polimi.ds.Host</mainClass>
+                <mainClass>it.polimi.ds.Allocator</mainClass>
               </configuration>
             </execution>
 

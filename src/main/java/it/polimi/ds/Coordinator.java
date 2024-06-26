@@ -6,19 +6,29 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
+
+import com.google.protobuf.ByteString;
 
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.AllocationRequest;
 import it.polimi.ds.proto.AllocationResponse;
 import it.polimi.ds.proto.CheckpointRequest;
+import it.polimi.ds.proto.ClientRequest;
+import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.NodeManagerInfo;
+import it.polimi.ds.proto.RegisterNodeManagerRequest;
+import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.WorkerManagerRequest;
 
 public class Coordinator {
 
@@ -26,6 +36,14 @@ public class Coordinator {
     public static int WORKER_PORT = 5001;
 
     private ConcurrentMap<Long, WorkerManagerHandler> workers = new ConcurrentHashMap<>();
+    private ByteString program; // TODO: Change this into the actual type after parsing step
+    private List<Address> allocators;
+
+    private int number_of_tasks;
+    private volatile long worker_managers_counter = 0;
+
+    private Object response_lock = new Object();
+    private DataResponse response = null;
 
     public Coordinator() {
     }
@@ -46,38 +64,57 @@ public class Coordinator {
         }
     }
 
+    void allocNodeManagers(Node conn) throws IOException {
+        var allocation_request = conn.receive(AllocationRequest.class);
+        number_of_tasks = allocation_request.getNumberOfTasks();
+
+        allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
+                .collect(Collectors.toList());
+
+        Node h = new Node(allocators.get(0));
+        h.send(AllocateNodeManagerRequest.newBuilder()
+                .setNodeManagerInfo(NodeManagerInfo.newBuilder()
+                        .setAddress(Address.getOwnAddress().withPort(WORKER_PORT).toProto())
+                        .setNumContainers(allocation_request.getNumberOfTasks()).build())
+                .build());
+
+        var resp = h.receive(AllocateNodeManagerResponse.class);
+
+        conn.send(AllocationResponse.newBuilder()
+                .build());
+    }
+
     Thread clientListener = new Thread(() -> {
         try {
-            ServerSocket clientListener = new ServerSocket(CLIENT_PORT);
-            Node conn = new Node(clientListener.accept());
-            var allocReq = conn.receive(AllocationRequest.class);
-            List<Address> hosts = allocReq.getAllocatorsList().stream().map(a -> new Address(a))
-                    .collect(Collectors.toList());
+            ServerSocket client_listener = new ServerSocket(CLIENT_PORT);
+            Node client = new Node(client_listener.accept());
 
-            // TODO: Maybe see how to split the work between the hosts
-            Node h = new Node(hosts.get(0));
-            h.send(AllocateNodeManagerRequest.newBuilder()
-                    .setNodeManagerInfo(NodeManagerInfo.newBuilder()
-                            .setAddress(Address.getOwnAddress().withPort(WORKER_PORT).toProto())
-                            .setNumContainers(allocReq.getNumberOfTasks()).build())
-                    .build());
-
-            var resp = h.receive(AllocateNodeManagerResponse.class);
-
-            conn.send(AllocationResponse.newBuilder().build());
+            allocNodeManagers(client);
+            waitUntilAllWorkersAreReady(number_of_tasks);
 
             while (true) {
                 try {
-                    var req = conn.receive(DataRequest.class);
-                    // TODO: Do something with the request
-                    conn.send(DataResponse.newBuilder().build());
+                    var req = client.receive(ClientRequest.class);
+                    if (req.hasDataRequest()) {
+                        System.out.println("Received data request " + req.getDataRequest().getData().toStringUtf8());
+
+                        var worker = workers.get(0L);
+                        worker.send(req.getDataRequest());
+                        System.out.println("Sent data request");
+
+                        client.send(waitForDataResponse());
+                    } else if (req.hasCloseRequest()) {
+                        System.out.println("Closing connection");
+                        client.send(CloseResponse.newBuilder().build());
+                        break;
+                    }
                 } catch (Exception e) {
-                    System.out.println("Client disconnected");
+                    System.out.println("Client disconnected -- " + e.getMessage());
                     break;
                 }
             }
 
-            conn.close();
+            client.close();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -90,7 +127,7 @@ public class Coordinator {
         try {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
             while (true) {
-                long id = 0;
+                long id = worker_managers_counter++;
                 workers.put(id, new WorkerManagerHandler(new Node(workerListener.accept())));
                 executors.submit(workers.get(id));
             }
@@ -127,13 +164,21 @@ public class Coordinator {
     });
 
     class WorkerManagerHandler implements Runnable {
-        private Node conn;
+        private Node control_connection;
+        private Node data_connection;
+
         public static final int CHECKPOINT_TIMEOUT = 1000;
-        private volatile boolean networkChanged = false;
+        private volatile boolean network_changed = false;
         private volatile boolean alive = true;
 
-        public WorkerManagerHandler(Node conn) {
-            this.conn = conn;
+        private final boolean is_last = true;
+
+        public WorkerManagerHandler(Node conn) throws IOException {
+            this.control_connection = conn;
+
+            var registration = conn.receive(RegisterNodeManagerRequest.class);
+            conn.send(RegisterNodeManagerResponse.newBuilder().setId(0).build());
+            data_connection = new Node(new Address(registration.getAddress()).withPort(WorkerManager.DATA_PORT));
         }
 
         public boolean checkAlive() {
@@ -141,18 +186,41 @@ public class Coordinator {
         }
 
         public void notifyNetworkChange() {
-            networkChanged = true;
+            network_changed = true;
+        }
+
+        /// TODO: This has to be changed, it's just placeholder
+        public void send(DataRequest req) throws IOException {
+            System.out.println("Sending data request");
+            data_connection.send(req);
+
+            if (is_last) {
+                new Thread(() -> {
+                    try {
+                        response = data_connection.receive(DataResponse.class);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    System.out.println("Received response");
+
+                    synchronized (response_lock) {
+                        response_lock.notifyAll();
+                    }
+                }).start();
+            }
         }
 
         @Override
         public void run() {
+            System.out.println("Worker manager connected");
             try {
                 while (true) {
                     try {
-                        var req = conn.receive(CheckpointRequest.class, CHECKPOINT_TIMEOUT);
+                        var req = control_connection.receive(CheckpointRequest.class, CHECKPOINT_TIMEOUT);
                         // TODO: Do something with the request
+
                     } catch (SocketTimeoutException e) {
-                        if (networkChanged) {
+                        if (network_changed) {
                             // TODO: Send the new network configuration
                         }
                     } catch (IOException e) {
@@ -166,6 +234,30 @@ public class Coordinator {
             }
             alive = false;
         }
+    }
+
+    void waitUntilAllWorkersAreReady(int requestedWorkers) {
+        while (workers.size() < requestedWorkers) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    DataResponse waitForDataResponse() {
+        System.out.println("Waiting for response");
+        synchronized (response_lock) {
+            try {
+                response_lock.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        System.out.println("Received response 2");
+
+        return response;
     }
 
     public static void main(String[] args) throws SocketException {

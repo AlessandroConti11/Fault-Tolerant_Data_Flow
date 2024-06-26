@@ -6,10 +6,13 @@ import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import com.google.protobuf.ByteString;
+
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.WorkerManagerRequest;
 
 public class WorkerManager {
 
@@ -21,6 +24,7 @@ public class WorkerManager {
     private Node coordinator;
     private final long id;
 
+    private ServerSocket data_listener = null;
     private final int layer_size;
 
     private ConcurrentMap<Long, Address> network_nodes = new ConcurrentHashMap<>();
@@ -33,6 +37,9 @@ public class WorkerManager {
                 .setAddress(Address.getOwnAddress().toProto())
                 .setTaskSlots(TASK_SLOTS)
                 .build());
+
+        data_listener = new ServerSocket(DATA_PORT);
+        data_communicator.start();
 
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
@@ -53,18 +60,20 @@ public class WorkerManager {
     /// DataCommunicator thread handles the communication with the other nodes in
     /// the case of the initialization, the coordinator. This expects to receive the
     /// DAG information to handle the tasks
-    Thread DataCommunicator = new Thread(() -> {
-        ServerSocket listener = null;
+    Thread data_communicator = new Thread(() -> {
         try {
-            listener = new ServerSocket(DATA_PORT);
             while (true) {
-                Node conn = new Node(listener.accept());
+                Node conn = new Node(data_listener.accept());
 
                 try {
                     var req = conn.receive(DataRequest.class);
+                    System.out.println("Received data request" + req.getData());
                     // TODO: Handle the data, get the task and execute it, if it's possible
 
-                    conn.send(DataResponse.newBuilder().build());
+                    conn.send(DataResponse.newBuilder()
+                            .setData(ByteString.copyFromUtf8("Data received"))
+                            .build());
+                    System.out.println("Sent data response");
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -72,8 +81,8 @@ public class WorkerManager {
             }
         } catch (IOException e) {
             try {
-                if (listener != null)
-                    listener.close();
+                if (data_listener != null)
+                    data_listener.close();
             } catch (Exception ee) {
             }
 
@@ -83,6 +92,7 @@ public class WorkerManager {
     });
 
     public static void main(String[] args) throws IOException {
+        System.out.println("Starting WorkerManager");
         new WorkerManager(args).start();
     }
 

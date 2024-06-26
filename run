@@ -1,8 +1,10 @@
 #!/bin/sh
 if [ -z "$1" ]; then
-  echo "Usage: $0 <host|client|proto|coord|workers>"
+  echo "Usage: $0 <alloc|client|proto|coord|workers>"
   exit 1
 fi
+
+set -e 
 
 if [ "$1" = "proto" ]; then
   mvn exec:exec@proto
@@ -43,8 +45,8 @@ do
 	all_others="$all_others $arg"
 done
 
-if [ $comm = "host" ]; then
-  mvn exec:java@host -Dexec.args="$all_others"
+if [ $comm = "alloc" ]; then
+  mvn exec:java@alloc -Dexec.args="$all_others"
 elif [ $comm = "client" ]; then
   mvn exec:java@client -Dexec.args="$all_others"
 elif [ $comm = "coord" ]; then
@@ -52,6 +54,6 @@ elif [ $comm = "coord" ]; then
 elif [ $comm = "workers" ]; then
   mvn exec:java@workers -Dexec.args="$all_others"
 else
-  echo "Usage: $0 <host|client|proto>"
+  echo "Usage: $0 <alloc|client|proto>"
   exit 1
 fi

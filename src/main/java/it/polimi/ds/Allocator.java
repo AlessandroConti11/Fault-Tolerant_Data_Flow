@@ -9,7 +9,7 @@ import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.NodeManagerInfo;
 
-public class Host {
+public class Allocator {
 
     public static final int PORT = 9090;
     public static int procCounter = 0;
@@ -19,7 +19,7 @@ public class Host {
         ProcessBuilder process_builder = new ProcessBuilder("mvn")
                 .redirectErrorStream(true);
 
-        System.out.println("Server is running on port " + PORT);
+        System.out.println("Server is running on " + Address.getOwnAddress().toString());
 
         while (true) {
             Node conn = new Node(listener.accept());

@@ -8,11 +8,28 @@ import "addr.proto";
 message AllocationRequest {
   repeated ProtoAddress allocators = 1;
   int32 number_of_tasks = 2;
+  bytes raw_program = 3;
 }
 message AllocationResponse {}
 
-message DataRequest {}
-message DataResponse {}
+message ClientRequest {
+  oneof request {
+    DataRequest data_request = 1;
+    CloseRequest close_request = 2;
+  }
+}
+
+message WorkerManagerRequest {
+  oneof request {
+    CheckpointRequest checkpoint_request = 1;
+    DataResponse result = 2;
+  }
+}
+message DataRequest { bytes data = 1; }
+message DataResponse { bytes data = 1; }
+
+message CloseRequest {}
+message CloseResponse {}
 
 message CheckpointRequest {
   int64 task_id = 1;
