@@ -16,6 +16,10 @@ import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
 
+import it.polimi.ds.CSV.ManageCSVfile;
+import it.polimi.ds.Directed_Acyclic_Graph.ManageDAG;
+import it.polimi.ds.function.FunctionName;
+import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.AllocationRequest;
@@ -29,6 +33,8 @@ import it.polimi.ds.proto.NodeManagerInfo;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
+import org.javatuples.Pair;
+import org.javatuples.Triplet;
 
 public class Coordinator {
 
@@ -39,7 +45,15 @@ public class Coordinator {
     private ByteString program; // TODO: Change this into the actual type after parsing step
     private List<Address> allocators;
 
-    private int number_of_tasks;
+    /**
+     * Manage the direct acyclic graph.
+     * - number of task manager
+     * - number of task
+     * - task per task manager
+     * - operations group
+     */
+    private ManageDAG dag = new ManageDAG();
+
     private volatile long worker_managers_counter = 0;
 
     private Object response_lock = new Object();
@@ -66,7 +80,7 @@ public class Coordinator {
 
     void allocNodeManagers(Node conn) throws IOException {
         var allocation_request = conn.receive(AllocationRequest.class);
-        number_of_tasks = allocation_request.getNumberOfTasks();
+        dag.setNumberOfTask(allocation_request.getNumberOfTasks());
 
         allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
                 .collect(Collectors.toList());
@@ -90,13 +104,33 @@ public class Coordinator {
             Node client = new Node(client_listener.accept());
 
             allocNodeManagers(client);
-            waitUntilAllWorkersAreReady(number_of_tasks);
+            waitUntilAllWorkersAreReady(dag.getNumberOfTask());
 
             while (true) {
                 try {
                     var req = client.receive(ClientRequest.class);
                     if (req.hasDataRequest()) {
                         System.out.println("Received data request " + req.getDataRequest().getData().toStringUtf8());
+
+                        //save all operation
+                        List<Triplet<OperatorName, FunctionName, Integer>> operations = ManageCSVfile.readCSVoperation(req.getOperationRequest());
+                        //save all data
+                        List<Pair<Integer, Integer>> data = ManageCSVfile.readCSVinput(req.getDataRequest().getData());
+                        dag.setData(data);
+
+                        //divide operation into subgroups ending with a Change Key & define the number of operation group needed.
+                        dag.generateOperationsGroup(operations);
+
+
+
+                        /*TODO:
+                            4. creare il dag
+                                a. dividere le task in gruppi
+                                b. assegnare l'ordine dei gruppi
+                                c. decidere quali gruppi sono checkpoint
+                                d. mandare il dag
+                                e. mandare la computazione
+                         */
 
                         var worker = workers.get(0L);
                         worker.send(req.getDataRequest());

@@ -16,6 +16,7 @@ message ClientRequest {
   oneof request {
     DataRequest data_request = 1;
     CloseRequest close_request = 2;
+    bytes operation_request = 3;
   }
 }
 

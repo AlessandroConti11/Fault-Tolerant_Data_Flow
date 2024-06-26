@@ -1,5 +1,6 @@
 package it.polimi.ds.CSV;
 
+import com.google.protobuf.ByteString;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvException;
 import it.polimi.ds.function.FunctionName;
@@ -8,10 +9,12 @@ import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 /**
  * The ManageCSVfile class provides methods for reading input tuples and
@@ -58,6 +61,14 @@ public class ManageCSVfile {
         } catch (IOException | CsvException e) {
             e.printStackTrace();
         }
+
+        return result;
+    }
+
+    public static List<Pair<Integer, Integer>> readCSVinput(ByteString data) {
+        List<Pair<Integer, Integer>> result = new ArrayList<>();
+
+        //TODO da scrivere
 
         return result;
     }
@@ -133,6 +144,15 @@ public class ManageCSVfile {
         }
 
         return result;
+    }
+
+    public static List<Triplet<OperatorName, FunctionName, Integer>> readCSVoperation(ByteString operation) {
+        //list of operation to return
+        List<Triplet<OperatorName, FunctionName, Integer>> operations = new ArrayList<>();
+
+        //TODO da scrivere
+
+        return operations;
     }
 
     /**
