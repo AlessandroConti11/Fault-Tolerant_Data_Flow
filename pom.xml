@@ -8,7 +8,7 @@
   <packaging>jar</packaging>
 
   <name>Fault-Tolerant_Data_Flow_new</name>
-  <url>http://maven.apache.org</url>
+  <url>https://maven.apache.org</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -40,12 +40,6 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>3.21.12</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.javatuples</groupId>
-      <artifactId>javatuples</artifactId>
-      <version>1.2</version>
     </dependency>
 
     <dependency>
