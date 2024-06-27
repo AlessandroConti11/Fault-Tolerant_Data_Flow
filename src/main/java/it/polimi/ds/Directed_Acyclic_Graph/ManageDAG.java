@@ -38,6 +38,22 @@ public class ManageDAG {
     private int numberOfGroups;
 
     /**
+     * Map of groups and TaskIDs are assigned for each group.
+     */
+    private HashMap<Integer, HashSet<Integer>> tasksInGroup = new HashMap<>();
+
+    /**
+     * Map the actual group and its follower group.
+     * Value = -1 if and only if the follower is the coordinator.
+     */
+    private HashMap<Integer, Integer> followerGroup  = new HashMap<>();
+
+    /**
+     * Set of checkpoints group.
+     */
+    private HashSet<Integer> checkPoints = new HashSet<>();
+
+    /**
      * List of operations to be calculated in a single operation group.
      * A group of operations consists of operations until a key change operation occurs.
      */
@@ -119,6 +135,33 @@ public class ManageDAG {
         return taskIsInTaskManager;
     }
 
+    /**
+     * Getter --> gets the map of all group and Task per group.
+     *
+     * @return the map of all group and Task per group.
+     */
+    public HashMap<Integer, HashSet<Integer>> getTasksInGroup() {
+        return tasksInGroup;
+    }
+
+    /**
+     * Getter --> gets the set of checkpoints group.
+     *
+     * @return the set of checkpoints group.
+     */
+    public HashSet<Integer> getCheckPoints() {
+        return checkPoints;
+    }
+
+    /**
+     * Getter --> gets the followers of the groups.
+     *
+     * @return the followers of the groups.
+     */
+    public HashMap<Integer, Integer> getFollowerGroup() {
+        return followerGroup;
+    }
+
 
     /**
      * Setter --> sets the number of Task Manager in the directed acyclic graph.
@@ -182,6 +225,33 @@ public class ManageDAG {
      */
     public void setTaskIsInTaskManager(HashMap<Integer, Integer> taskIsInTaskManager) {
         this.taskIsInTaskManager = taskIsInTaskManager;
+    }
+
+    /**
+     * Setter --> sets the map of all group and Task per group.
+     *
+     * @param tasksInGroup the map of all group and Task per group.
+     */
+    public void setTasksInGroup(HashMap<Integer, HashSet<Integer>> tasksInGroup) {
+        this.tasksInGroup = tasksInGroup;
+    }
+
+    /**
+     * Setter --> sets the set of checkpoints group.
+     *
+     * @param checkPoints the set of checkpoints group.
+     */
+    public void setCheckPoints(HashSet<Integer> checkPoints) {
+        this.checkPoints = checkPoints;
+    }
+
+    /**
+     * Setter --> sets the followers of the groups.
+     *
+     * @param followerGroup the followers of the groups.
+     */
+    public void setFollowerGroup(HashMap<Integer, Integer> followerGroup) {
+        this.followerGroup = followerGroup;
     }
 
 
@@ -273,18 +343,6 @@ public class ManageDAG {
         this.operationsGroup.remove(operation);
     }
 
-
-    /**
-     * Returns the number of tasks required for each computation block before a key change operation.
-     *
-     * @param operation the list of all operation to compute.
-     * @return the number of tasks required for each computation block before a key change operation.
-     */
-    public Integer numberIdPerTask(List<Triplet<OperatorName, FunctionName, Integer>> operation) {
-        return (Integer) (numberOfTask / Operator.numberOfChangeKeys(operation));
-    }
-
-
     public void generateOperationsGroup(List<Triplet<OperatorName, FunctionName, Integer>> operations) {
         //list of operation group
         ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup = new ArrayList<>();
@@ -296,8 +354,30 @@ public class ManageDAG {
     }
 
 
+    /**
+     * Returns the number of tasks required for each computation block before a key change operation.
+     *
+     * @param operation the list of all operation to compute.
+     * @return the number of tasks required for each computation block before a key change operation.
+     */
+    public Integer numberIdPerTask(List<Triplet<OperatorName, FunctionName, Integer>> operation) {
+        return (Integer) (numberOfTask / Operator.numberOfChangeKeys(operation));
+    }
+
+    public void divideTaskInGroup() {
+        //TODO
+        //i gruppi di operazioni ci sono già
+        //il numero di gruppi c'è già
+
+        //va solamente scritta la funzione che aggiunge ad una lista il set delle task che ci sono nel gruppo
+        //e aggiungere alla mappa followerGroup i follower di ogni gruppo
+    }
 
 
+    public void assignCheckpoint(int numberOfCheckpoint) {
+        //TODO
+        // in base a quanti checkpoint si vogliono fare dividerli
+    }
 
 
     /*

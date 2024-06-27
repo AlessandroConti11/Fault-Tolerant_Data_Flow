@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,10 +50,6 @@ public class Coordinator {
 
     /**
      * Manage the direct acyclic graph.
-     * - number of task manager
-     * - number of task
-     * - task per task manager
-     * - operations group
      */
     private ManageDAG dag = new ManageDAG();
 
@@ -121,17 +120,45 @@ public class Coordinator {
                         //divide operation into subgroups ending with a Change Key & define the number of operation group needed.
                         dag.generateOperationsGroup(operations);
 
+                        //divide the task in group & assign the group order
+                        dag.divideTaskInGroup();
+
+                        //TODO how to decide how many checkpoints are needed
+                        //assign the checkpoint
+                        dag.assignCheckpoint(2);
+
+                        //Set of groups of checkpoint.
+                        HashSet<Integer> checkpoint = dag.getCheckPoints();
+                        //Map groupID and Tasks in the group.
+                        HashMap<Integer, HashSet<Integer>> groupTask = dag.getTasksInGroup();
+                        //Map the actual group and the follower.
+                        HashMap<Integer, Integer> dagFollowerGroupGroup = dag.getFollowerGroup();
 
 
-                        /*TODO:
-                            4. creare il dag
-                                a. dividere le task in gruppi
-                                b. assegnare l'ordine dei gruppi
-                                c. decidere quali gruppi sono checkpoint
-                                d. mandare il dag
-                                e. mandare la computazione
-                         */
+                        //get the tasks that are checkpoint and inform them
+                        for (Integer groupID : checkpoint) {
+                            //Tasks in the group.
+                            HashSet<Integer> tasks = groupTask.get(groupID);
 
+                            for (Integer taskID : tasks) {
+                                //TODO send a message to all tasks within a checkpoint that are checkpoints
+                            }
+                        }
+
+                        //TODO send a message to all group which is the follower
+                        for (Integer groupID : groupTask.keySet()) {
+                            //Task in the group.
+                            HashSet<Integer> tasks = groupTask.get(groupID);
+
+                            for (Integer taskID : tasks) {
+                                //Follower group
+                                Integer followerGroup = dagFollowerGroupGroup.get(groupID);
+
+                                //TODO send a message to all task in the group which group is the follower - followerGroup
+                            }
+                        }
+
+                        //TODO fix it - send only the operations to be computed by each individual group
                         var worker = workers.get(0L);
                         worker.send(req.getDataRequest());
                         System.out.println("Sent data request");
