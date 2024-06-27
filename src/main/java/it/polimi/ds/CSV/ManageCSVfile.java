@@ -65,33 +65,42 @@ public class ManageCSVfile {
         return result;
     }
 
-    public static List<Pair<Integer, Integer>> readCSVinput(ByteString data) {
-        List<Pair<Integer, Integer>> result = new ArrayList<>();
-
-        //TODO da scrivere
-
-        return result;
-    }
-
     /**
      * Reads the input tuples from CSV file.
      *
-     * @param csvFile the CSV input file.
+     * @param data the CSV input file.
      * @return the input tuple.
      */
-    public static List<Pair<Integer, Integer>> readCSVresult(File csvFile) {
+    public static List<Pair<Integer, Integer>> readCSVinput(ByteString data) {
+        //The list of pair key, value to return.
         List<Pair<Integer, Integer>> result = new ArrayList<>();
+        //Convert ByteString to String.
+        String string = data.toString(StandardCharsets.UTF_8);
+        //Split the String by lines.
+        String[] lines = string.split("\n");
 
-        try (CSVReader reader = new CSVReader(new FileReader(csvFile))) {
-            List<String[]> records = reader.readAll();
-
-            // reads all input tuple
-            for (int i = 0; i < records.size(); i++) {
-                result.add(new Pair<>(Integer.parseInt(records.get(i)[0].split(";")[0]),
-                        Integer.parseInt(records.get(i)[0].split(";")[1])));
+        //for each line
+        for (String line : lines) {
+            //trim the line to remove any leading or trailing whitespace
+            line = line.trim();
+            if (line.isEmpty()) {
+                continue; // Skip empty lines
             }
-        } catch (IOException | CsvException e) {
-            e.printStackTrace();
+
+            //Split the line by semicolon
+            String[] pair = line.split(";");
+
+            //check if the pair is composed of 2 value
+            try {
+                if (pair.length != 2) {
+                    throw new IllegalArgumentException();
+                }
+                //add the pair in the result
+                result.add(new Pair<>(Integer.parseInt(pair[0].trim()), Integer.parseInt(pair[1].trim())));
+            }
+            catch (IllegalArgumentException | NullPointerException e) {
+                e.printStackTrace();
+            }
         }
 
         return result;
@@ -134,10 +143,10 @@ public class ManageCSVfile {
             List<String[]> records = reader.readAll();
 
             // reads all operation to perform - start from the last tuple input
-            for (int i = 0; i < records.size(); i++) {
-                result.add(new Triplet<>(OperatorName.getsEnumerationValue(records.get(i)[0].split(";")[0]),
-                        FunctionName.getsEnumerationValue(records.get(i)[0].split(";")[1]),
-                        Integer.parseInt(records.get(i)[0].split(";")[2])));
+            for (String[] record : records) {
+                result.add(new Triplet<>(OperatorName.getsEnumerationValue(record[0].split(";")[0]),
+                        FunctionName.getsEnumerationValue(record[0].split(";")[1]),
+                        Integer.parseInt(record[0].split(";")[2])));
             }
         } catch (IOException | CsvException e) {
             e.printStackTrace();
@@ -146,14 +155,75 @@ public class ManageCSVfile {
         return result;
     }
 
+    /**
+     * Reads the input operation from CSV file.
+     *
+     * @param operation the CSV input file.
+     * @return the operation to be carried out.
+     */
     public static List<Triplet<OperatorName, FunctionName, Integer>> readCSVoperation(ByteString operation) {
         //list of operation to return
         List<Triplet<OperatorName, FunctionName, Integer>> operations = new ArrayList<>();
+        //Convert ByteString to String.
+        String string = operation.toString(StandardCharsets.UTF_8);
+        //Split the String by lines.
+        String[] lines = string.split("\n");
 
-        //TODO da scrivere
+
+        //for each line
+        for (String line : lines) {
+            //trim the line to remove any leading or trailing whitespace
+            line = line.trim();
+            if (line.isEmpty()) {
+                continue; // Skip empty lines
+            }
+
+            //Split the line by semicolon
+            String[] triplet = line.split(";");
+
+            //check if the pair is composed of 2 value
+            try {
+                if (triplet.length != 3) {
+                    throw new IllegalArgumentException();
+                }
+                //add the pair in the result
+                operations.add(new Triplet<>(OperatorName.getsEnumerationValue(triplet[0].trim()),
+                        FunctionName.getsEnumerationValue(triplet[1].trim()),
+                        Integer.parseInt(triplet[2].trim())));
+            }
+            catch (IllegalArgumentException | NullPointerException e) {
+                e.printStackTrace();
+            }
+        }
 
         return operations;
     }
+
+
+    /**
+     * Reads the input tuples from CSV file.
+     *
+     * @param csvFile the CSV input file.
+     * @return the input tuple.
+     */
+    public static List<Pair<Integer, Integer>> readCSVresult(File csvFile) {
+        List<Pair<Integer, Integer>> result = new ArrayList<>();
+
+        try (CSVReader reader = new CSVReader(new FileReader(csvFile))) {
+            List<String[]> records = reader.readAll();
+
+            // reads all input tuple
+            for (int i = 0; i < records.size(); i++) {
+                result.add(new Pair<>(Integer.parseInt(records.get(i)[0].split(";")[0]),
+                        Integer.parseInt(records.get(i)[0].split(";")[1])));
+            }
+        } catch (IOException | CsvException e) {
+            e.printStackTrace();
+        }
+
+        return result;
+    }
+
 
     /**
      * Checks if a CSV file has the correct format for input.

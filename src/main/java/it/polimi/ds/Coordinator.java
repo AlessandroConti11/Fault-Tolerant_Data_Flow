@@ -145,7 +145,7 @@ public class Coordinator {
                             }
                         }
 
-                        //TODO send a message to all group which is the follower
+                        //get the tasks and inform them about their follow group
                         for (Integer groupID : groupTask.keySet()) {
                             //Task in the group.
                             HashSet<Integer> tasks = groupTask.get(groupID);
