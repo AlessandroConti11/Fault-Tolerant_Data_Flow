@@ -343,11 +343,24 @@ public class ManageDAG {
         this.operationsGroup.remove(operation);
     }
 
+    /**
+     * Generates groups of operations that end with either a Change Key operation or a Reduce operation.
+     *
+     * @param operations the list of all operation to compute.
+     */
     public void generateOperationsGroup(List<Triplet<OperatorName, FunctionName, Integer>> operations) {
         //list of operation group
         ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup = new ArrayList<>();
+        //group of operation
+        List<Triplet<OperatorName, FunctionName, Integer>> op = new ArrayList<>();
 
-        //TODO da finire
+        for (Triplet<OperatorName, FunctionName, Integer> operation : operations) {
+            op.add(operation);
+            if (operation.getValue0() == OperatorName.CHANGE_KEY || operation.getValue0() == OperatorName.REDUCE) {
+                operationsGroup.add(op);
+                op = new ArrayList<>();
+            }
+        }
 
         //sets operation groups & the number of group needed.
         setOperationsGroup(operationsGroup);
@@ -364,19 +377,68 @@ public class ManageDAG {
         return (Integer) (numberOfTask / Operator.numberOfChangeKeys(operation));
     }
 
+    /**
+     * Divides tasks into groups where each group performs a part of the overall computation.
+     */
     public void divideTaskInGroup() {
-        //TODO
-        //i gruppi di operazioni ci sono già
-        //il numero di gruppi c'è già
+        //Number of task per group
+        int taskPerGroup = (int) numberOfGroups / numberOfTask;
+        //Tasks to be added to the group.
+        HashSet<Integer> tasks = new HashSet<>();
+        //Task in all the group.
+        HashMap<Integer, HashSet<Integer>> taskInGroup = new HashMap<>();
+        //Group id.
+        int groupID = 0;
+        //Follower group
+        HashMap<Integer, Integer> nextGroup = new HashMap<>();
 
-        //va solamente scritta la funzione che aggiunge ad una lista il set delle task che ci sono nel gruppo
-        //e aggiungere alla mappa followerGroup i follower di ogni gruppo
+        for (Integer task : taskIsInTaskManager.keySet()) {
+            //create group: group id, task set
+            tasks.add(task);
+            if (tasks.size() == taskPerGroup) {
+                taskInGroup.put(groupID, tasks);
+                tasks = new HashSet<>();
+                groupID++;
+            }
+
+            //create the map between the actual group id and the next one - -1 if the successor is the coordinator because the computation is finished
+            nextGroup.put(groupID, groupID != numberOfGroups - 1 ? groupID + 1 : -1);
+        }
+
+        //set the map group id, task set
+        this.setTasksInGroup(taskInGroup);
+
+        //set the group follower
+        this.setFollowerGroup(nextGroup);
     }
 
-
+    /**
+     * Assigns which groups are checkpoints.
+     *
+     * @param numberOfCheckpoint the number of checkpoints requested.
+     */
     public void assignCheckpoint(int numberOfCheckpoint) {
-        //TODO
-        // in base a quanti checkpoint si vogliono fare dividerli
+        //Checkpoints.
+        HashSet<Integer> cp = new HashSet<>();
+
+        if (numberOfCheckpoint > numberOfGroups) {
+            //assigns each group as a checkpoint
+            cp.addAll(tasksInGroup.keySet());
+        }
+        else {
+            //Index.
+            int i = 0;
+            for (Integer groupID : tasksInGroup.keySet()) {
+                //assigns as checkpoints only checkpoints that are multiple of the required number of checkpoints
+                if (i % (this.numberOfGroups / numberOfCheckpoint) == 0) {
+                    cp.add(groupID);
+                }
+                i++;
+            }
+        }
+
+        //sets the checkpoints
+        this.setCheckPoints(cp);
     }
 
 
