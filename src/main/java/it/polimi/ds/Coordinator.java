@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,6 +19,10 @@ import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
 
+import it.polimi.ds.CSV.ManageCSVfile;
+import it.polimi.ds.Directed_Acyclic_Graph.ManageDAG;
+import it.polimi.ds.function.FunctionName;
+import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.AllocationRequest;
@@ -29,6 +36,8 @@ import it.polimi.ds.proto.NodeManagerInfo;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
+import org.javatuples.Pair;
+import org.javatuples.Triplet;
 
 public class Coordinator {
 
@@ -39,7 +48,11 @@ public class Coordinator {
     private ByteString program; // TODO: Change this into the actual type after parsing step
     private List<Address> allocators;
 
-    private int number_of_tasks;
+    /**
+     * Manage the direct acyclic graph.
+     */
+    private ManageDAG dag = new ManageDAG();
+
     private volatile long worker_managers_counter = 0;
 
     private Object response_lock = new Object();
@@ -66,7 +79,7 @@ public class Coordinator {
 
     void allocNodeManagers(Node conn) throws IOException {
         var allocation_request = conn.receive(AllocationRequest.class);
-        number_of_tasks = allocation_request.getNumberOfTasks();
+        dag.setNumberOfTask(allocation_request.getNumberOfTasks());
 
         allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
                 .collect(Collectors.toList());
@@ -90,7 +103,7 @@ public class Coordinator {
             Node client = new Node(client_listener.accept());
 
             allocNodeManagers(client);
-            waitUntilAllWorkersAreReady(number_of_tasks);
+            waitUntilAllWorkersAreReady(dag.getNumberOfTask());
 
             while (true) {
                 try {
@@ -98,6 +111,54 @@ public class Coordinator {
                     if (req.hasDataRequest()) {
                         System.out.println("Received data request " + req.getDataRequest().getData().toStringUtf8());
 
+                        //save all operation
+                        List<Triplet<OperatorName, FunctionName, Integer>> operations = ManageCSVfile.readCSVoperation(req.getOperationRequest());
+                        //save all data
+                        List<Pair<Integer, Integer>> data = ManageCSVfile.readCSVinput(req.getDataRequest().getData());
+                        dag.setData(data);
+
+                        //divide operation into subgroups ending with a Change Key & define the number of operation group needed.
+                        dag.generateOperationsGroup(operations);
+
+                        //divide the task in group & assign the group order
+                        dag.divideTaskInGroup();
+
+                        //TODO how to decide how many checkpoints are needed
+                        //assign the checkpoint
+                        dag.assignCheckpoint(2);
+
+                        //Set of groups of checkpoint.
+                        HashSet<Integer> checkpoint = dag.getCheckPoints();
+                        //Map groupID and Tasks in the group.
+                        HashMap<Integer, HashSet<Integer>> groupTask = dag.getTasksInGroup();
+                        //Map the actual group and the follower.
+                        HashMap<Integer, Integer> dagFollowerGroupGroup = dag.getFollowerGroup();
+
+
+                        //get the tasks that are checkpoint and inform them
+                        for (Integer groupID : checkpoint) {
+                            //Tasks in the group.
+                            HashSet<Integer> tasks = groupTask.get(groupID);
+
+                            for (Integer taskID : tasks) {
+                                //TODO send a message to all tasks within a checkpoint that are checkpoints
+                            }
+                        }
+
+                        //get the tasks and inform them about their follow group
+                        for (Integer groupID : groupTask.keySet()) {
+                            //Task in the group.
+                            HashSet<Integer> tasks = groupTask.get(groupID);
+
+                            for (Integer taskID : tasks) {
+                                //Follower group
+                                Integer followerGroup = dagFollowerGroupGroup.get(groupID);
+
+                                //TODO send a message to all task in the group which group is the follower - followerGroup
+                            }
+                        }
+
+                        //TODO fix it - send only the operations to be computed by each individual group
                         var worker = workers.get(0L);
                         worker.send(req.getDataRequest());
                         System.out.println("Sent data request");
