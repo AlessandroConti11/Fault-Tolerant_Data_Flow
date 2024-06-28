@@ -5,6 +5,8 @@ import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvException;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.OperatorName;
+import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.Operation;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
@@ -197,6 +199,23 @@ public class ManageCSVfile {
         }
 
         return operations;
+    }
+
+    /**
+     * Reads the input operation from CSV file.
+     *
+     * @param operation the CSV input file.
+     * @return the operation to be carried out.
+     */
+    public static List<Triplet<OperatorName, FunctionName, Integer>> readCSVoperation(Computation operation) {
+        //list of operation to return
+        List<Triplet<OperatorName, FunctionName, Integer>> result = new ArrayList<>();
+
+        for (Operation op : operation.getOperationsList()) {
+            result.add(new Triplet<>(OperatorName.values()[op.getOperatorName()], FunctionName.values()[op.getFunctionName()], op.getInput()));
+        }
+
+        return result;
     }
 
 

@@ -31,7 +31,6 @@ import it.polimi.ds.proto.Operation;
 import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
-import it.polimi.ds.proto.Task;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;

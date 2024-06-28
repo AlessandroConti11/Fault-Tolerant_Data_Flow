@@ -18,6 +18,7 @@ import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
+import org.javatuples.Pair;
 
 public class WorkerManager {
 
@@ -35,6 +36,37 @@ public class WorkerManager {
     private ServerSocket data_listener = null;
 
     private ConcurrentMap<Long, Address> network_nodes = new ConcurrentHashMap<>();
+
+
+    /**
+     * Gets the task.
+     *
+     * @param taskId the id of the task to be obtained.
+     * @return the task that has the requested id.
+     */
+    Task getTask(long taskId) {
+        for (Task task : tasks) {
+            if (task.getId() == taskId) {
+                return task;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Gets the computation.
+     *
+     * @param groupId the id of the group to get the computation of.
+     * @return the computation of the group requested.
+     */
+    Computation getComputation(long groupId) {
+        for (Computation computation : computations) {
+            if (computation.getGroupId() == groupId) {
+                return computation;
+            }
+        }
+        return null;
+    }
 
     public WorkerManager(String[] args) throws IOException {
         coordinator_address = Address.fromString(args[0]).getValue0();
@@ -95,10 +127,21 @@ public class WorkerManager {
                 try {
                     var req = conn.receive(DataRequest.class);
                     System.out.println("Received data request" + req.getData());
-                    // TODO: Handle the data, get the task and execute it, if it's possible
+
+                    //Get the computation that contains the operation to perform.
+                    Computation comp = this.getComputation(getTask(req.getTaskId()).getGroup_id());
+                    if (comp == null) {
+                        //TODO
+                        System.out.println("ERROR: Computation not found");
+                    }
+
+                    //Execute the operations and return the new data.
+                    List<Pair<Integer, Integer>> newData = getTask(req.getTaskId()).execute(comp, req.getData());
 
                     conn.send(DataResponse.newBuilder()
-                            .setData(ByteString.copyFromUtf8("Data received"))
+                            //TODO così va bene?? secondo me sì
+                            // oppure va creato un nuovo messaggio che rappresenta una tupla??
+                            .setData(ByteString.copyFromUtf8(newData.toString()))
                             .build());
                     System.out.println("Sent data response");
                 } catch (IOException e) {
@@ -121,27 +164,5 @@ public class WorkerManager {
     public static void main(String[] args) throws IOException {
         System.out.println("Starting WorkerManager");
         new WorkerManager(args).start();
-    }
-
-    class Task {
-        private long id;
-        private long group_id;
-        private boolean is_checkpoint;
-        private volatile boolean has_all_data = false;
-        private Object data;
-
-        public Task(long id, long group_id, boolean is_checkpoint) {
-            this.id = id;
-            this.is_checkpoint = is_checkpoint;
-            this.group_id = group_id;
-        }
-
-        public boolean isReady() {
-            return has_all_data;
-        }
-
-        public void execute() {
-            System.out.println("Executing task " + id);
-        }
     }
 }
