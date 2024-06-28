@@ -12,6 +12,8 @@ import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.UpdateNetworkRequest;
+import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
 
 public class WorkerManager {
@@ -19,13 +21,12 @@ public class WorkerManager {
     public static final int TASK_SLOTS = 5;
     public static final int DATA_PORT = 5002;
 
-    private Task[] tasks = new Task[TASK_SLOTS];
+    private Vector<Task> tasks = new Vector<>(TASK_SLOTS);
     private Address coordinator_address;
     private Node coordinator;
     private final long id;
 
     private ServerSocket data_listener = null;
-    private final int layer_size;
 
     private ConcurrentMap<Long, Address> network_nodes = new ConcurrentHashMap<>();
 
@@ -43,17 +44,36 @@ public class WorkerManager {
 
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
-        // TODO: Fix this
-        // TODO: Also get the network configuration before starting doing anything
-        layer_size = 1;
+        for (long task : resp.getTaskIdsList()) {
+            tasks.add(new Task(task, false));
+        }
     }
 
     /// Main thread handles the connection with the coordinator that listens for
     /// changes in the network
     public void start() {
         while (true) {
-            // var req = coordinator.receive(something);
-            // update the network_nodes map
+            UpdateNetworkRequest network_change;
+            try {
+                network_change = coordinator.receive(UpdateNetworkRequest.class);
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            var nodes = network_change.getAddressesList();
+            var ids = network_change.getTaskManagerIdsList();
+            for (int i = 0; i < nodes.size(); i++) {
+                network_nodes.put(ids.get(i), new Address(nodes.get(i)));
+            }
+
+            System.out.println("Network updated");
+
+            try {
+                coordinator.send(UpdateNetworkResponse.newBuilder().build());
+            } catch (IOException e) {
+                // UNREACHABLE, coordinator is reliable
+            }
         }
     }
 
@@ -98,30 +118,17 @@ public class WorkerManager {
 
     class Task {
         private long id;
-        private int layer;
         private boolean is_checkpoint;
-        private Vector<Long> dependencies;
+        private volatile boolean has_all_data = false;
         private Object data;
 
-        public Task(long id, int layer, boolean is_checkpoint, Object data) {
+        public Task(long id, boolean is_checkpoint) {
             this.id = id;
-            this.layer = layer;
             this.is_checkpoint = is_checkpoint;
-            this.data = data;
-            this.dependencies = new Vector<>();
-        }
-
-        public void addDependency(long id) {
-            dependencies.add(id);
         }
 
         public boolean isReady() {
-            for (long dep : dependencies) {
-                if (!network_nodes.containsKey(dep)) {
-                    return false;
-                }
-            }
-            return true;
+            return has_all_data;
         }
 
         public void execute() {

@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,6 +36,8 @@ import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.NodeManagerInfo;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.UpdateNetworkRequest;
+import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
@@ -48,15 +51,10 @@ public class Coordinator {
     private ByteString program; // TODO: Change this into the actual type after parsing step
     private List<Address> allocators;
 
-    /**
-     * Manage the direct acyclic graph.
-     */
-    private ManageDAG dag = new ManageDAG();
-
-    private volatile long worker_managers_counter = 0;
-
     private Object response_lock = new Object();
     private DataResponse response = null;
+
+    private ManageDAG dag = null;
 
     public Coordinator() {
     }
@@ -66,44 +64,44 @@ public class Coordinator {
         workerListener.start();
         heartbeat.start();
 
-        // TODO: This is just temporary, we should have to wait until the computation is
-        // done
+        /// Stall the main thread
+        Object lock = new Object();
         try {
-            clientListener.join();
-            workerListener.join();
-            heartbeat.join();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+            synchronized (lock) {
+                lock.wait();
+            }
+        } catch (Exception e) {
         }
     }
 
     void allocNodeManagers(Node conn) throws IOException {
-        var allocation_request = conn.receive(AllocationRequest.class);
-        dag.setNumberOfTask(allocation_request.getNumberOfTasks());
-
-        allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
-                .collect(Collectors.toList());
-
-        Node h = new Node(allocators.get(0));
-        h.send(AllocateNodeManagerRequest.newBuilder()
-                .setNodeManagerInfo(NodeManagerInfo.newBuilder()
-                        .setAddress(Address.getOwnAddress().withPort(WORKER_PORT).toProto())
-                        .setNumContainers(allocation_request.getNumberOfTasks()).build())
-                .build());
-
-        var resp = h.receive(AllocateNodeManagerResponse.class);
-
-        conn.send(AllocationResponse.newBuilder()
-                .build());
     }
 
     Thread clientListener = new Thread(() -> {
         try {
+            /// Wait for a client to connect
             ServerSocket client_listener = new ServerSocket(CLIENT_PORT);
             Node client = new Node(client_listener.accept());
 
-            allocNodeManagers(client);
-            waitUntilAllWorkersAreReady(dag.getNumberOfTask());
+            /// Receive from the client the allocation request that will contian the number
+            /// of Wokermanagers needed for the computation, the address of the allocators
+            /// and the program to be executed
+            var allocation_request = client.receive(AllocationRequest.class);
+
+            /// Create the schedule of the program using a DAG
+            program = allocation_request.getRawProgram();
+            dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
+
+            /// Allocate the WokerManagers on the appropriate allocators
+            allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
+                    .collect(Collectors.toList());
+
+            allocateResources(dag.getNumberOfTaskManager());
+            waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+
+            /// Send back the OK to the client, this will signal that the network is ready
+            client.send(AllocationResponse.newBuilder()
+                    .build());
 
             while (true) {
                 try {
@@ -111,63 +109,21 @@ public class Coordinator {
                     if (req.hasDataRequest()) {
                         System.out.println("Received data request " + req.getDataRequest().getData().toStringUtf8());
 
-                        //save all operation
-                        List<Triplet<OperatorName, FunctionName, Integer>> operations = ManageCSVfile.readCSVoperation(req.getOperationRequest());
-                        //save all data
-                        List<Pair<Integer, Integer>> data = ManageCSVfile.readCSVinput(req.getDataRequest().getData());
-                        dag.setData(data);
+                        dag.setData(ManageCSVfile.readCSVinput(req.getDataRequest().getData()));
 
-                        //divide operation into subgroups ending with a Change Key & define the number of operation group needed.
-                        dag.generateOperationsGroup(operations);
-
-                        //divide the task in group & assign the group order
-                        dag.divideTaskInGroup();
-
-                        //TODO how to decide how many checkpoints are needed
-                        //assign the checkpoint
-                        dag.assignCheckpoint(2);
-
-                        //Set of groups of checkpoint.
-                        HashSet<Integer> checkpoint = dag.getCheckPoints();
-                        //Map groupID and Tasks in the group.
-                        HashMap<Integer, HashSet<Integer>> groupTask = dag.getTasksInGroup();
-                        //Map the actual group and the follower.
-                        HashMap<Integer, Integer> dagFollowerGroupGroup = dag.getFollowerGroup();
-
-
-                        //get the tasks that are checkpoint and inform them
-                        for (Integer groupID : checkpoint) {
-                            //Tasks in the group.
-                            HashSet<Integer> tasks = groupTask.get(groupID);
-
-                            for (Integer taskID : tasks) {
-                                //TODO send a message to all tasks within a checkpoint that are checkpoints
+                        dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
+                            try {
+                                workers.get((long) t).send(req.getDataRequest());
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
-                        }
-
-                        //get the tasks and inform them about their follow group
-                        for (Integer groupID : groupTask.keySet()) {
-                            //Task in the group.
-                            HashSet<Integer> tasks = groupTask.get(groupID);
-
-                            for (Integer taskID : tasks) {
-                                //Follower group
-                                Integer followerGroup = dagFollowerGroupGroup.get(groupID);
-
-                                //TODO send a message to all task in the group which group is the follower - followerGroup
-                            }
-                        }
-
-                        //TODO fix it - send only the operations to be computed by each individual group
-                        var worker = workers.get(0L);
-                        worker.send(req.getDataRequest());
-                        System.out.println("Sent data request");
+                        });
 
                         client.send(waitForDataResponse());
                     } else if (req.hasCloseRequest()) {
                         System.out.println("Closing connection");
                         client.send(CloseResponse.newBuilder().build());
-                        break;
+                        System.exit(0);
                     }
                 } catch (Exception e) {
                     System.out.println("Client disconnected -- " + e.getMessage());
@@ -188,8 +144,11 @@ public class Coordinator {
         try {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
             while (true) {
-                long id = worker_managers_counter++;
-                workers.put(id, new WorkerManagerHandler(new Node(workerListener.accept())));
+                long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO: Handle this case, in theory it should
+                                                                      // never happen, but you never know. This happens
+                                                                      // when we initialize to many workerManagers
+                                                                      // somehow
+                workers.put(id, new WorkerManagerHandler(new Node(workerListener.accept()), id));
                 executors.submit(workers.get(id));
             }
         } catch (Exception e) {
@@ -201,22 +160,24 @@ public class Coordinator {
         Object lock = new Object();
         try {
             while (true) {
-                boolean networkChanged = false;
+                int crashed = 0;
                 for (var worker : workers.entrySet()) {
                     synchronized (lock) {
                         boolean alive = worker.getValue().checkAlive();
                         if (!alive) {
+                            dag.addFreeTaskManager((int) (long) worker.getKey());
                             workers.remove(worker.getKey());
-                            networkChanged = true;
+                            crashed++;
                         }
                     }
 
                 }
 
-                if (networkChanged) {
-                    for (var worker : workers.entrySet()) {
-                        worker.getValue().notifyNetworkChange();
-                    }
+                if (crashed > 0) {
+                    allocateResources(crashed);
+                    waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+
+                    // TODO: Figure out how to send the checkpoint data
                 }
             }
         } catch (Exception e) {
@@ -230,27 +191,45 @@ public class Coordinator {
 
         public static final int CHECKPOINT_TIMEOUT = 1000;
         private volatile boolean network_changed = false;
-        private volatile boolean alive = true;
+        private volatile boolean alive = false;
 
         private final boolean is_last = true;
 
-        public WorkerManagerHandler(Node conn) throws IOException {
+        private long id;
+        private Address address;
+
+        public WorkerManagerHandler(Node conn, long id) throws IOException {
             this.control_connection = conn;
+            this.id = id;
 
             var registration = conn.receive(RegisterNodeManagerRequest.class);
-            conn.send(RegisterNodeManagerResponse.newBuilder().setId(0).build());
-            data_connection = new Node(new Address(registration.getAddress()).withPort(WorkerManager.DATA_PORT));
+            this.address = new Address(registration.getAddress());
+
+            List<Long> tasks = dag.getTasksOfTaskManager((int) id);
+            Set<Long> managersOfNextGroup = dag.getManagersOfNextGroup((int) id);
+            conn.send(RegisterNodeManagerResponse.newBuilder()
+                    .setId(id)
+                    .addAllTaskIds(tasks)
+                    .addAllManagerSuccessorIds(managersOfNextGroup.stream().collect(Collectors.toList()))
+                    .build());
+
+            data_connection = new Node(address.withPort(WorkerManager.DATA_PORT));
+
+            alive = true;
         }
 
         public boolean checkAlive() {
             return alive;
         }
 
+        public boolean isReady() {
+            return alive && network_changed;
+        }
+
         public void notifyNetworkChange() {
             network_changed = true;
         }
 
-        /// TODO: This has to be changed, it's just placeholder
         public void send(DataRequest req) throws IOException {
             System.out.println("Sending data request");
             data_connection.send(req);
@@ -278,11 +257,20 @@ public class Coordinator {
                 while (true) {
                     try {
                         var req = control_connection.receive(CheckpointRequest.class, CHECKPOINT_TIMEOUT);
-                        // TODO: Do something with the request
+                        // TODO: dag.putChecckpointData();
+                        // Also, we need dag.getCheckpointData();
 
                     } catch (SocketTimeoutException e) {
                         if (network_changed) {
-                            // TODO: Send the new network configuration
+                            control_connection.send(UpdateNetworkRequest.newBuilder()
+                                    .addAllTaskManagerIds(workers.keySet())
+                                    .addAllAddresses(workers.values().stream()
+                                            .map(w -> w.address.toProto())
+                                            .collect(Collectors.toList()))
+                                    .build());
+
+                            var ok = control_connection.receive(UpdateNetworkResponse.class);
+                            network_changed = false;
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -297,8 +285,31 @@ public class Coordinator {
         }
     }
 
+    void allocateResources(int requestedWorkers) throws IOException {
+        Node h = new Node(allocators.get(0));
+        h.send(AllocateNodeManagerRequest.newBuilder()
+                .setNodeManagerInfo(NodeManagerInfo.newBuilder()
+                        .setAddress(Address.getOwnAddress().withPort(WORKER_PORT).toProto())
+                        .setNumContainers(requestedWorkers).build())
+                .build());
+
+        var resp = h.receive(AllocateNodeManagerResponse.class);
+
+        /// Wait until all the workers are ready, then, once we have collected all the
+        /// network information, notify the WorkerManagers of all the others' addresses
+        waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+        workers.forEach((k, v) -> {
+            v.notifyNetworkChange();
+        });
+    }
+
     void waitUntilAllWorkersAreReady(int requestedWorkers) {
-        while (workers.size() < requestedWorkers) {
+        int ready = workers.entrySet().stream()
+                .map(e -> e.getValue())
+                .mapToInt(e -> e.isReady() ? 1 : 0)
+                .sum();
+
+        while (ready < requestedWorkers) {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {

@@ -1,15 +1,22 @@
 package it.polimi.ds.Directed_Acyclic_Graph;
 
+import it.polimi.ds.WorkerManager;
+import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
+import com.google.protobuf.ByteString;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.Vector;
 
 public class ManageDAG {
     /**
@@ -17,10 +24,15 @@ public class ManageDAG {
      */
     private int numberOfTaskManager;
 
+    private Vector<Integer> freeTaskManagers = new Vector<>();
+
     /**
      * Total number of Task.
      */
     private int numberOfTask;
+
+    private int maxTasksPerTaskManger = WorkerManager.TASK_SLOTS;
+    private int maxTasksPerGroup;
 
     /**
      * Map between the TaskManagerID and the number of Task per TaskManager.
@@ -33,11 +45,6 @@ public class ManageDAG {
     private HashMap<Integer, Integer> taskIsInTaskManager = new HashMap<>();
 
     /**
-     * Number of operation group.
-     */
-    private int numberOfGroups;
-
-    /**
      * Map of groups and TaskIDs are assigned for each group.
      */
     private HashMap<Integer, HashSet<Integer>> tasksInGroup = new HashMap<>();
@@ -46,7 +53,7 @@ public class ManageDAG {
      * Map the actual group and its follower group.
      * Value = -1 if and only if the follower is the coordinator.
      */
-    private HashMap<Integer, Integer> followerGroup  = new HashMap<>();
+    private HashMap<Integer, Integer> followerGroup = new HashMap<>();
 
     /**
      * Set of checkpoints group.
@@ -55,7 +62,8 @@ public class ManageDAG {
 
     /**
      * List of operations to be calculated in a single operation group.
-     * A group of operations consists of operations until a key change operation occurs.
+     * A group of operations consists of operations until a key change operation
+     * occurs.
      */
     private ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup = new ArrayList<>();
 
@@ -64,13 +72,27 @@ public class ManageDAG {
      */
     private List<Pair<Integer, Integer>> data = new ArrayList<>();
 
-
     /**
      * Constructor
      */
-    public ManageDAG() {
-    }
+    public ManageDAG(ByteString program, int numberOftasksManagers) {
+        this.setNumberOfTaskManager(numberOfTaskManager);
 
+        // divide operation into subgroups ending with a Change Key & define the number
+        // of operation group needed.
+        this.generateOperationsGroup(ManageCSVfile.readCSVoperation(program));
+
+        this.maxTasksPerGroup = (getNumberOfTaskManager() * maxTasksPerTaskManger) / this.operationsGroup.size();
+        if (this.maxTasksPerGroup == 0) {
+            // TODO: Error, not enough resources
+        }
+
+        // divide the task in group & assign the group order
+        this.divideTaskInGroup();
+
+        // TODO: how to decide how many checkpoints are needed
+        this.assignCheckpoint(2);
+    }
 
     /**
      * Getter --> gets the number of Task Manager in the directed acyclic graph.
@@ -91,16 +113,19 @@ public class ManageDAG {
     }
 
     /**
-     * Getter --> gets the map between the TaskManagerID and the number of Task per TaskManager.
+     * Getter --> gets the map between the TaskManagerID and the number of Task per
+     * TaskManager.
      *
-     * @return the map between the TaskManagerID and the number of Task per TaskManager.
+     * @return the map between the TaskManagerID and the number of Task per
+     *         TaskManager.
      */
     public HashMap<Integer, Integer> getTaskPerTaskManager() {
         return taskPerTaskManager;
     }
 
     /**
-     * Getter --> gets the list of operations to be calculated in a single operation group.
+     * Getter --> gets the list of operations to be calculated in a single operation
+     * group.
      *
      * @return the list of operations to be calculated in a single operation group.
      */
@@ -123,7 +148,7 @@ public class ManageDAG {
      * @return the number of group of operation needed.
      */
     public int getNumberOfGroups() {
-        return numberOfGroups;
+        return this.operationsGroup.size();
     }
 
     /**
@@ -144,6 +169,10 @@ public class ManageDAG {
         return tasksInGroup;
     }
 
+    public HashSet<Integer> getTasksOfGroup(int groupId) {
+        return tasksInGroup.get(groupId);
+    }
+
     /**
      * Getter --> gets the set of checkpoints group.
      *
@@ -162,14 +191,26 @@ public class ManageDAG {
         return followerGroup;
     }
 
-
     /**
      * Setter --> sets the number of Task Manager in the directed acyclic graph.
      *
-      * @param numberOfTaskManager the number of Task Manager in the directed acyclic graph.
+     * @param numberOfTaskManager the number of Task Manager in the directed acyclic
+     *                            graph.
      */
     public void setNumberOfTaskManager(int numberOfTaskManager) {
+        int oldNumberOfTaskManager = this.numberOfTaskManager;
+
         this.numberOfTaskManager = numberOfTaskManager;
+
+        if (oldNumberOfTaskManager < numberOfTaskManager) {
+            for (int i = oldNumberOfTaskManager; i < numberOfTaskManager; i++) {
+                freeTaskManagers.add(i);
+            }
+        }
+    }
+
+    public void addFreeTaskManager(int taskManagerId) {
+        freeTaskManagers.add(taskManagerId);
     }
 
     /**
@@ -182,22 +223,25 @@ public class ManageDAG {
     }
 
     /**
-     * Setter --> sets the map between the TaskManagerID and the number of Task per TaskManager.
+     * Setter --> sets the map between the TaskManagerID and the number of Task per
+     * TaskManager.
      *
-     * @param taskPerTaskManager the map between the TaskManagerID and the number of Task per TaskManager.
+     * @param taskPerTaskManager the map between the TaskManagerID and the number of
+     *                           Task per TaskManager.
      */
     public void setTaskPerTaskManager(HashMap<Integer, Integer> taskPerTaskManager) {
         this.taskPerTaskManager = taskPerTaskManager;
     }
 
     /**
-     * Setter --> sets the list of operations to be calculated in a single operation group.
+     * Setter --> sets the list of operations to be calculated in a single operation
+     * group.
      *
-     * @param operationsGroup the list of operations to be calculated in a single operation group.
+     * @param operationsGroup the list of operations to be calculated in a single
+     *                        operation group.
      */
     public void setOperationsGroup(ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup) {
         this.operationsGroup = operationsGroup;
-        this.numberOfGroups = operationsGroup.size();
     }
 
     /**
@@ -207,15 +251,6 @@ public class ManageDAG {
      */
     public void setData(List<Pair<Integer, Integer>> data) {
         this.data = data;
-    }
-
-    /**
-     * Setter --> sets the number of group of operation needed.
-     *
-     * @param numberOfGroups the number of group of operation needed.
-     */
-    public void setNumberOfGroups(int numberOfGroups) {
-        this.numberOfGroups = numberOfGroups;
     }
 
     /**
@@ -254,7 +289,6 @@ public class ManageDAG {
         this.followerGroup = followerGroup;
     }
 
-
     /**
      * Adds a new Task Manager.
      *
@@ -277,12 +311,11 @@ public class ManageDAG {
         this.numberOfTaskManager--;
     }
 
-
     /**
      * Adds a new Task in a specific Task Manager.
      *
      * @param taskManager the Task Manager ID.
-     * @param taskToAdd the number of Tasks to add.
+     * @param taskToAdd   the number of Tasks to add.
      */
     public void addTask(Integer taskManager, Integer taskToAdd) {
         this.taskPerTaskManager.replace(taskManager, this.taskPerTaskManager.get(taskManager) + taskToAdd);
@@ -293,7 +326,7 @@ public class ManageDAG {
      * Adds a new Task in a specific Task Manager.
      *
      * @param taskManagerId the Task Manager ID.
-     * @param taskId the Task ID.
+     * @param taskId        the Task ID.
      */
     public void addTask(Integer taskManagerId, int taskId) {
         this.taskPerTaskManager.replace(taskManagerId, this.taskPerTaskManager.get(taskManagerId) + 1);
@@ -304,7 +337,7 @@ public class ManageDAG {
     /**
      * Removes a Task in a specific Task Manager.
      *
-     * @param taskManager the Task Manager ID.
+     * @param taskManager  the Task Manager ID.
      * @param taskToRemove the number of Tasks to remove.
      */
     public void removeTask(Integer taskManager, Integer taskToRemove) {
@@ -316,14 +349,13 @@ public class ManageDAG {
      * Removes a Task in a specific Task Manager.
      *
      * @param taskManagerId the Task Manager ID.
-     * @param taskId the Task ID.
+     * @param taskId        the Task ID.
      */
     public void removeTask(Integer taskManagerId, int taskId) {
         this.taskPerTaskManager.replace(taskManagerId, this.taskPerTaskManager.get(taskManagerId) - 1);
         this.numberOfTask--;
         this.taskIsInTaskManager.remove(taskId);
     }
-
 
     /**
      * Adds an operation group.
@@ -344,14 +376,15 @@ public class ManageDAG {
     }
 
     /**
-     * Generates groups of operations that end with either a Change Key operation or a Reduce operation.
+     * Generates groups of operations that end with either a Change Key operation or
+     * a Reduce operation.
      *
      * @param operations the list of all operation to compute.
      */
     public void generateOperationsGroup(List<Triplet<OperatorName, FunctionName, Integer>> operations) {
-        //list of operation group
+        // list of operation group
         ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup = new ArrayList<>();
-        //group of operation
+        // group of operation
         List<Triplet<OperatorName, FunctionName, Integer>> op = new ArrayList<>();
 
         for (Triplet<OperatorName, FunctionName, Integer> operation : operations) {
@@ -362,38 +395,41 @@ public class ManageDAG {
             }
         }
 
-        //sets operation groups & the number of group needed.
+        // sets operation groups & the number of group needed.
         setOperationsGroup(operationsGroup);
     }
 
-
     /**
-     * Returns the number of tasks required for each computation block before a key change operation.
+     * Returns the number of tasks required for each computation block before a key
+     * change operation.
      *
      * @param operation the list of all operation to compute.
-     * @return the number of tasks required for each computation block before a key change operation.
+     * @return the number of tasks required for each computation block before a key
+     *         change operation.
      */
     public Integer numberIdPerTask(List<Triplet<OperatorName, FunctionName, Integer>> operation) {
         return (Integer) (numberOfTask / Operator.numberOfChangeKeys(operation));
     }
 
     /**
-     * Divides tasks into groups where each group performs a part of the overall computation.
+     * Divides tasks into groups where each group performs a part of the overall
+     * computation.
      */
     public void divideTaskInGroup() {
-        //Number of task per group
-        int taskPerGroup = (int) numberOfGroups / numberOfTask;
-        //Tasks to be added to the group.
+        // TODO: Check for the remainder
+        // Number of task per group
+        int taskPerGroup = (int) this.operationsGroup.size() / numberOfTask;
+        // Tasks to be added to the group.
         HashSet<Integer> tasks = new HashSet<>();
-        //Task in all the group.
+        // Task in all the group.
         HashMap<Integer, HashSet<Integer>> taskInGroup = new HashMap<>();
-        //Group id.
+        // Group id.
         int groupID = 0;
-        //Follower group
+        // Follower group
         HashMap<Integer, Integer> nextGroup = new HashMap<>();
 
         for (Integer task : taskIsInTaskManager.keySet()) {
-            //create group: group id, task set
+            // create group: group id, task set
             tasks.add(task);
             if (tasks.size() == taskPerGroup) {
                 taskInGroup.put(groupID, tasks);
@@ -401,14 +437,15 @@ public class ManageDAG {
                 groupID++;
             }
 
-            //create the map between the actual group id and the next one - -1 if the successor is the coordinator because the computation is finished
-            nextGroup.put(groupID, groupID != numberOfGroups - 1 ? groupID + 1 : -1);
+            // create the map between the actual group id and the next one - -1 if the
+            // successor is the coordinator because the computation is finished
+            nextGroup.put(groupID, groupID != this.operationsGroup.size() - 1 ? groupID + 1 : -1);
         }
 
-        //set the map group id, task set
+        // set the map group id, task set
         this.setTasksInGroup(taskInGroup);
 
-        //set the group follower
+        // set the group follower
         this.setFollowerGroup(nextGroup);
     }
 
@@ -418,43 +455,76 @@ public class ManageDAG {
      * @param numberOfCheckpoint the number of checkpoints requested.
      */
     public void assignCheckpoint(int numberOfCheckpoint) {
-        //Checkpoints.
+        // Checkpoints.
         HashSet<Integer> cp = new HashSet<>();
 
-        if (numberOfCheckpoint > numberOfGroups) {
-            //assigns each group as a checkpoint
+        if (numberOfCheckpoint > this.operationsGroup.size()) {
+            // assigns each group as a checkpoint
             cp.addAll(tasksInGroup.keySet());
-        }
-        else {
-            //Index.
+        } else {
+            // Index.
             int i = 0;
             for (Integer groupID : tasksInGroup.keySet()) {
-                //assigns as checkpoints only checkpoints that are multiple of the required number of checkpoints
-                if (i % (this.numberOfGroups / numberOfCheckpoint) == 0) {
+                // assigns as checkpoints only checkpoints that are multiple of the required
+                // number of checkpoints
+                if (i % (this.operationsGroup.size() / numberOfCheckpoint) == 0) {
                     cp.add(groupID);
                 }
                 i++;
             }
         }
 
-        //sets the checkpoints
+        // sets the checkpoints
         this.setCheckPoints(cp);
     }
 
+    public Optional<Integer> getNextFreeTaskManager() {
+        if (freeTaskManagers.size() > 0) {
+            return Optional.of(freeTaskManagers.remove(freeTaskManagers.size() - 1));
+        }
+
+        return Optional.empty();
+    }
+
+    // TODO: Set Id to Long
+    public List<Long> getTasksOfTaskManager(int taskManagerId) {
+        return taskIsInTaskManager
+                .keySet()
+                .stream()
+                .filter(taskId -> taskIsInTaskManager.get(taskId) == taskManagerId)
+                .map(Long::valueOf)
+                .toList();
+    }
+
+    // TODO: Set Id to Long
+    public Set<Long> getManagersOfNextGroup(int groupId) {
+        var nextTasks = tasksInGroup.get(groupId + 1)
+                .stream()
+                .map(taskId -> taskIsInTaskManager.get(taskId))
+                .map(Long::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+
+        Set<Long> managers = new HashSet<>();
+        for (Long taskManagerId : nextTasks) {
+            managers.add(taskManagerId);
+        }
+
+        return managers;
+    }
 
     /*
-        insieme 1 --> insieme 2 -->
-
-
-
-        DAG:
-        - insiemi successivi
-            - TMid
-            - Tid
-        - check point
-
-        operation to execute
-        last data
-        a chi mando i dati
+     * insieme 1 --> insieme 2 -->
+     * 
+     * 
+     * 
+     * DAG:
+     * - insiemi successivi
+     * - TMid
+     * - Tid
+     * - check point
+     * 
+     * operation to execute
+     * last data
+     * a chi mando i dati
      */
 }

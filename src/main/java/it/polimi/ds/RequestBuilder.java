@@ -32,6 +32,7 @@ public class RequestBuilder {
         public Object sendData(ByteString data) throws IOException {
             coordinator.send(ClientRequest.newBuilder()
                     .setDataRequest(DataRequest.newBuilder()
+                            .setTaskId(-1)
                             .setData(data)
                             .build())
                     .build());
@@ -100,7 +101,7 @@ public class RequestBuilder {
             coordinator = new Node(coordinator_address);
             coordinator.send(AllocationRequest.newBuilder()
                     .addAllAllocators(allocators.stream().map(a -> a.toProto()).collect(Collectors.toList()))
-                    .setNumberOfTasks(allocations)
+                    .setNumberOfAllocations(allocations)
                     .setRawProgram(program)
                     .build());
 

@@ -7,7 +7,7 @@ import "addr.proto";
 
 message AllocationRequest {
   repeated ProtoAddress allocators = 1;
-  int32 number_of_tasks = 2;
+  int32 number_of_allocations = 2;
   bytes raw_program = 3;
 }
 message AllocationResponse {}
@@ -16,7 +16,6 @@ message ClientRequest {
   oneof request {
     DataRequest data_request = 1;
     CloseRequest close_request = 2;
-    bytes operation_request = 3;
   }
 }
 
@@ -26,7 +25,10 @@ message WorkerManagerRequest {
     DataResponse result = 2;
   }
 }
-message DataRequest { bytes data = 1; }
+message DataRequest {
+  int64 task_id = 1;
+  bytes data = 2;
+}
 message DataResponse { bytes data = 1; }
 
 message CloseRequest {}
@@ -44,4 +46,15 @@ message RegisterNodeManagerRequest {
   int32 task_slots = 2;
 }
 
-message RegisterNodeManagerResponse { int64 id = 1; }
+message RegisterNodeManagerResponse {
+  int64 id = 1;
+  repeated int64 task_ids = 2;
+  repeated int64 manager_successor_ids = 3;
+}
+
+message UpdateNetworkRequest {
+  repeated ProtoAddress addresses = 1;
+  repeated int64 task_manager_ids = 2;
+}
+
+message UpdateNetworkResponse {}
