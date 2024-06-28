@@ -48,8 +48,26 @@ message RegisterNodeManagerRequest {
 
 message RegisterNodeManagerResponse {
   int64 id = 1;
-  repeated int64 task_ids = 2;
+  repeated ProtoTask tasks = 2;
   repeated int64 manager_successor_ids = 3;
+  repeated Computation computations = 4;
+}
+
+message ProtoTask {
+  int64 id = 1;
+  int64 group_id = 2;
+  int32 is_checkpoint = 3;
+}
+
+message Computation {
+  int64 group_id = 2;
+  repeated Operation operations = 3;
+}
+
+message Operation {
+  int32 operator_name = 1;
+  int32 function_name = 2;
+  int32 input = 3;
 }
 
 message UpdateNetworkRequest {

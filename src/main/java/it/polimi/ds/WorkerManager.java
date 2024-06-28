@@ -2,14 +2,17 @@ package it.polimi.ds;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import com.google.protobuf.ByteString;
 
+import it.polimi.ds.proto.Computation;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
+import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
@@ -25,6 +28,9 @@ public class WorkerManager {
     private Address coordinator_address;
     private Node coordinator;
     private final long id;
+
+    // Computation has a pair of group_id and the list of operations
+    private List<Computation> computations;
 
     private ServerSocket data_listener = null;
 
@@ -44,8 +50,9 @@ public class WorkerManager {
 
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
-        for (long task : resp.getTaskIdsList()) {
-            tasks.add(new Task(task, false));
+        computations = resp.getComputationsList();
+        for (ProtoTask t : resp.getTasksList()) {
+            tasks.add(new Task(t.getId(), t.getGroupId(), t.getIsCheckpoint() == 1 ? true : false));
         }
     }
 
@@ -118,13 +125,15 @@ public class WorkerManager {
 
     class Task {
         private long id;
+        private long group_id;
         private boolean is_checkpoint;
         private volatile boolean has_all_data = false;
         private Object data;
 
-        public Task(long id, boolean is_checkpoint) {
+        public Task(long id, long group_id, boolean is_checkpoint) {
             this.id = id;
             this.is_checkpoint = is_checkpoint;
+            this.group_id = group_id;
         }
 
         public boolean isReady() {

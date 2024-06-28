@@ -4,26 +4,18 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
 
 import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.Directed_Acyclic_Graph.ManageDAG;
-import it.polimi.ds.function.FunctionName;
-import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.AllocationRequest;
@@ -31,16 +23,18 @@ import it.polimi.ds.proto.AllocationResponse;
 import it.polimi.ds.proto.CheckpointRequest;
 import it.polimi.ds.proto.ClientRequest;
 import it.polimi.ds.proto.CloseResponse;
+import it.polimi.ds.proto.Computation;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.NodeManagerInfo;
+import it.polimi.ds.proto.Operation;
+import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.Task;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
-import org.javatuples.Pair;
-import org.javatuples.Triplet;
 
 public class Coordinator {
 
@@ -207,10 +201,31 @@ public class Coordinator {
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
             Set<Long> managersOfNextGroup = dag.getManagersOfNextGroup((int) id);
+            var operations = dag.getOperationsForTaskManager(id);
+
+            /// WARNING: I don't want to touch this thing, I'm scared of it
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
-                    .addAllTaskIds(tasks)
+                    .addAllTasks(tasks.stream()
+                            .map(t -> ProtoTask.newBuilder()
+                                    .setId(t)
+                                    .setGroupId(dag.groupFromTask((int) (long) t).get())
+                                    .setIsCheckpoint(0) // TODO: Fix this
+                                    .build())
+                            .collect(Collectors.toList()))
                     .addAllManagerSuccessorIds(managersOfNextGroup.stream().collect(Collectors.toList()))
+                    .addAllComputations(operations.stream()
+                            .map(op -> Computation.newBuilder()
+                                    .setGroupId(op.getValue1())
+                                    .addAllOperations(op.getValue0().stream()
+                                            .map(o -> Operation.newBuilder()
+                                                    .setOperatorName(o.getValue0().ordinal())
+                                                    .setFunctionName(o.getValue1().ordinal())
+                                                    .setInput(o.getValue2())
+                                                    .build())
+                                            .collect(Collectors.toList()))
+                                    .build())
+                            .collect(Collectors.toList()))
                     .build());
 
             data_connection = new Node(address.withPort(WorkerManager.DATA_PORT));

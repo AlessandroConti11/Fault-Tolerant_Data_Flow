@@ -7,6 +7,7 @@ import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
+import org.javatuples.Tuple;
 
 import com.google.protobuf.ByteString;
 
@@ -486,6 +487,16 @@ public class ManageDAG {
         return Optional.empty();
     }
 
+    public Optional<Long> groupFromTask(long taskId) {
+        for (Integer group : tasksInGroup.keySet()) {
+            if (tasksInGroup.get(group).contains((int) taskId)) {
+                return Optional.of(Long.valueOf(group));
+            }
+        }
+
+        return Optional.empty();
+    }
+
     // TODO: Set Id to Long
     public List<Long> getTasksOfTaskManager(int taskManagerId) {
         return taskIsInTaskManager
@@ -497,10 +508,15 @@ public class ManageDAG {
     }
 
     // TODO: Set Id to Long
-    public Set<Long> getManagersOfNextGroup(int groupId) {
-        var nextTasks = tasksInGroup.get(groupId + 1)
+    public Set<Long> getManagersOfNextGroup(int taskId) {
+        var groupId = groupFromTask(taskId);
+        if (groupId.isEmpty()) {
+            return new HashSet<>();
+        }
+
+        var nextTasks = tasksInGroup.get((int) (long) groupId.get() + 1)
                 .stream()
-                .map(taskId -> taskIsInTaskManager.get(taskId))
+                .map(t -> taskIsInTaskManager.get(t))
                 .map(Long::valueOf)
                 .collect(java.util.stream.Collectors.toSet());
 
@@ -510,6 +526,22 @@ public class ManageDAG {
         }
 
         return managers;
+    }
+
+    public List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> getOperationsForTaskManager(
+            long taskManagerId) {
+        List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> operations = new ArrayList<>();
+
+        // Get the tasks of the task manager
+        List<Long> tasks = getTasksOfTaskManager((int) taskManagerId);
+        // Get the group of the task
+        List<Long> groups = tasks.stream().map(this::groupFromTask).map(Optional::get).toList();
+        // Get the operations of the group
+        for (Long group : groups) {
+            operations.add(new Pair(operationsGroup.get((int) (long) group), group));
+        }
+
+        return operations;
     }
 
     /*
