@@ -12,16 +12,22 @@ import org.javatuples.Triplet;
 import java.util.List;
 
 class Task {
-    private long id;
-    private long group_id;
-    private boolean is_checkpoint;
+    private final long id;
+    private final long group_id;
+    private final boolean is_checkpoint;
+    private final int group_size;
+    private final Computation computation;
+
     private volatile boolean has_all_data = false;
+    private int data_count = 0;
     private Object data;
 
-    public Task(long id, long group_id, boolean is_checkpoint) {
+    public Task(long id, long group_id, Computation computation, boolean is_checkpoint, int group_size) {
         this.id = id;
         this.is_checkpoint = is_checkpoint;
         this.group_id = group_id;
+        this.group_size = group_size;
+        this.computation = computation;
     }
 
     /**
@@ -46,19 +52,45 @@ class Task {
         return has_all_data;
     }
 
+    // TODO: Change object to the correct type.
+    public void addData(Object data) {
+        this.data = data;
+        data_count++;
+        if (data_count == group_size) {
+            has_all_data = true;
+
+            synchronized (this) {
+                this.notifyAll();
+            }
+        }
+    }
+
+    public List<Long> getSuccessorIds() {
+        return computation.getManagerSuccessorIdsList();
+    }
+
     /**
      * Perform the operation.
      *
-     * @param computations the operation to perform.
-     * @param data the data on which to perform the required operations.
      * @return the new data, after the operations have been performed.
      */
-    public List<Pair<Integer, Integer>> execute(Computation computations, ByteString data) {
-        //Data to compute.
-        List<Pair<Integer, Integer>> dataToCompute = ManageCSVfile.readCSVinput(data);
-        //Operation to be performed on data.
-        List<Triplet<OperatorName, FunctionName, Integer>> operationToCompute = ManageCSVfile.readCSVoperation(computations);
+    public List<Pair<Integer, Integer>> execute() {
+        // Data to compute.
+        List<Pair<Integer, Integer>> dataToCompute = ManageCSVfile.readCSVinput((ByteString) data);
+        // Operation to be performed on data.
+        List<Triplet<OperatorName, FunctionName, Integer>> operationToCompute = ManageCSVfile
+                .readCSVoperation(computation);
 
         return new Operator().operations(operationToCompute, dataToCompute);
+    }
+
+    public void waitForData() {
+        synchronized (this) {
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }

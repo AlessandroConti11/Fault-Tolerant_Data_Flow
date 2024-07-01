@@ -26,17 +26,18 @@ public class WorkerManager {
     public static final int DATA_PORT = 5002;
 
     private Vector<Task> tasks = new Vector<>(TASK_SLOTS);
+    private Vector<Thread> task_threads = new Vector<>(TASK_SLOTS);
+    // Computation has a pair of group_id and the list of operations
+    private List<Computation> computations;
+
     private Address coordinator_address;
     private Node coordinator;
     private final long id;
-
-    // Computation has a pair of group_id and the list of operations
-    private List<Computation> computations;
+    private final int group_size;
 
     private ServerSocket data_listener = null;
 
     private ConcurrentMap<Long, Address> network_nodes = new ConcurrentHashMap<>();
-
 
     /**
      * Gets the task.
@@ -83,8 +84,44 @@ public class WorkerManager {
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
         computations = resp.getComputationsList();
+        group_size = resp.getGroupSize();
+
         for (ProtoTask t : resp.getTasksList()) {
-            tasks.add(new Task(t.getId(), t.getGroupId(), t.getIsCheckpoint() == 1 ? true : false));
+            Task task = new Task(t.getId(),
+                    t.getGroupId(),
+                    getComputation(t.getGroupId()),
+                    t.getIsCheckpoint() == 1 ? true : false,
+                    group_size);
+
+            tasks.add(task);
+
+            task_threads.add(new Thread(() -> {
+                task.waitForData();
+
+                /// Now the task has all the data, we can execute it
+                var result = task.execute();
+
+                task.getSuccessorIds().parallelStream()
+                        .forEach(successor_id -> {
+                            var successor = network_nodes.get(successor_id);
+                            if (successor == null) {
+                                System.out.println("ERROR: Successor not found");
+                                return;
+                            }
+
+                            try {
+                                Node conn = new Node(successor);
+                                conn.send(DataRequest.newBuilder()
+                                        .setTaskId(task.getId())
+                                        // TODO: Fix type
+                                        .setData(ByteString.copyFromUtf8(result.toString()))
+                                        .build());
+                                conn.close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
+            }));
         }
     }
 
@@ -127,23 +164,13 @@ public class WorkerManager {
                 try {
                     var req = conn.receive(DataRequest.class);
                     System.out.println("Received data request" + req.getData());
+                    // TODO: Maybe put some queue to hold the data until it can receive the new data
+                    // for the task
 
-                    //Get the computation that contains the operation to perform.
-                    Computation comp = this.getComputation(getTask(req.getTaskId()).getGroup_id());
-                    if (comp == null) {
-                        //TODO
-                        System.out.println("ERROR: Computation not found");
-                    }
+                    // TODO: Change types
+                    getTask(req.getTaskId()).addData(req.getData().toStringUtf8());
 
-                    //Execute the operations and return the new data.
-                    List<Pair<Integer, Integer>> newData = getTask(req.getTaskId()).execute(comp, req.getData());
-
-                    conn.send(DataResponse.newBuilder()
-                            //TODO così va bene?? secondo me sì
-                            // oppure va creato un nuovo messaggio che rappresenta una tupla??
-                            .setData(ByteString.copyFromUtf8(newData.toString()))
-                            .build());
-                    System.out.println("Sent data response");
+                    conn.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

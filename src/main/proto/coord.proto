@@ -48,8 +48,8 @@ message RegisterNodeManagerRequest {
 
 message RegisterNodeManagerResponse {
   int64 id = 1;
-  repeated ProtoTask tasks = 2;
-  repeated int64 manager_successor_ids = 3;
+  int32 group_size = 2;
+  repeated ProtoTask tasks = 3;
   repeated Computation computations = 4;
 }
 
@@ -60,7 +60,8 @@ message ProtoTask {
 }
 
 message Computation {
-  int64 group_id = 2;
+  int64 group_id = 1;
+  repeated int64 manager_successor_ids = 2;
   repeated Operation operations = 3;
 }
 

@@ -508,13 +508,8 @@ public class ManageDAG {
     }
 
     // TODO: Set Id to Long
-    public Set<Long> getManagersOfNextGroup(int taskId) {
-        var groupId = groupFromTask(taskId);
-        if (groupId.isEmpty()) {
-            return new HashSet<>();
-        }
-
-        var nextTasks = tasksInGroup.get((int) (long) groupId.get() + 1)
+    public Set<Long> getManagersOfNextGroup(int group_id) {
+        var nextTasks = tasksInGroup.get((int) (long) group_id + 1)
                 .stream()
                 .map(t -> taskIsInTaskManager.get(t))
                 .map(Long::valueOf)

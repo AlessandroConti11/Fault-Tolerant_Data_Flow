@@ -199,7 +199,6 @@ public class Coordinator {
             this.address = new Address(registration.getAddress());
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
-            Set<Long> managersOfNextGroup = dag.getManagersOfNextGroup((int) id);
             var operations = dag.getOperationsForTaskManager(id);
 
             /// WARNING: I don't want to touch this thing, I'm scared of it
@@ -212,10 +211,13 @@ public class Coordinator {
                                     .setIsCheckpoint(0) // TODO: Fix this
                                     .build())
                             .collect(Collectors.toList()))
-                    .addAllManagerSuccessorIds(managersOfNextGroup.stream().collect(Collectors.toList()))
+                    // .addAllManagerSuccessorIds(managersOfNextGroup.stream().collect(Collectors.toList()))
                     .addAllComputations(operations.stream()
                             .map(op -> Computation.newBuilder()
                                     .setGroupId(op.getValue1())
+                                    .addAllManagerSuccessorIds(
+                                            dag.getManagersOfNextGroup((int) (long) op.getValue1()).stream()
+                                                    .collect(Collectors.toList()))
                                     .addAllOperations(op.getValue0().stream()
                                             .map(o -> Operation.newBuilder()
                                                     .setOperatorName(o.getValue0().ordinal())
