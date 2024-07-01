@@ -1,5 +1,6 @@
 package it.polimi.ds.Directed_Acyclic_Graph;
 
+import it.polimi.ds.Exceptions;
 import it.polimi.ds.WorkerManager;
 import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.function.FunctionName;
@@ -83,17 +84,24 @@ public class ManageDAG {
     /**
      * Constructor
      */
-    public ManageDAG(ByteString program, int numberOftasksManagers) {
+    public ManageDAG(ByteString program, int numberOftasksManagers) throws Exception {
+        if (!ManageCSVfile.checkCSVoperator(program)) {
+            throw new Exceptions.MalformedProgramFormatException();
+        }
+
         this.setNumberOfTaskManager(numberOfTaskManager);
 
         // divide operation into subgroups ending with a Change Key & define the number
         // of operation group needed.
         this.generateOperationsGroup(ManageCSVfile.readCSVoperation(program));
 
+        this.setNumberOfTask(numberOftasksManagers * maxTasksPerTaskManger);
+
         this.maxTasksPerGroup = (getNumberOfTaskManager() * maxTasksPerTaskManger) / this.operationsGroup.size();
         if (this.maxTasksPerGroup == 0) {
             // TODO: Error, not enough resources
         }
+
 
         // divide the task in group & assign the group order
         this.divideTaskInGroup();
@@ -402,6 +410,7 @@ public class ManageDAG {
                 op = new ArrayList<>();
             }
         }
+        operationsGroup.add(op);
 
         // sets operation groups & the number of group needed.
         setOperationsGroup(operationsGroup);

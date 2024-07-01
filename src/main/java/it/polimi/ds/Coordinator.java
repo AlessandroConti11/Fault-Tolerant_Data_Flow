@@ -5,7 +5,6 @@ import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -55,8 +54,6 @@ public class Coordinator {
 
     public void start() {
         clientListener.start();
-        workerListener.start();
-        heartbeat.start();
 
         /// Stall the main thread
         Object lock = new Object();
@@ -66,6 +63,11 @@ public class Coordinator {
             }
         } catch (Exception e) {
         }
+    }
+
+    public void startWorker() {
+        workerListener.start();
+        heartbeat.start();
     }
 
     void allocNodeManagers(Node conn) throws IOException {
@@ -85,6 +87,7 @@ public class Coordinator {
             /// Create the schedule of the program using a DAG
             program = allocation_request.getRawProgram();
             dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
+            startWorker();
             if (false) {
                 client.send(AllocationResponse.newBuilder()
                         .setCode(ReturnCode.INVALID_PROGRAM)

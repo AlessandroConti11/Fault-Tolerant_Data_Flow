@@ -278,6 +278,46 @@ public class ManageCSVfile {
     }
 
     /**
+     * Checks if a CSV file has the correct format for input.
+     * It verifies that all rows contain three elements (operation | function | quantity).
+     *
+     * @param operation the input file that contains the data.
+     * @return true if the file format is correct, false otherwise.
+     */
+    public static boolean checkCSVoperator(ByteString operation) {
+        //Convert ByteString to String.
+        String string = operation.toString(StandardCharsets.UTF_8);
+        //Split the String by lines.
+        String[] lines = string.split("\n");
+
+
+        //for each line
+        for (String line : lines) {
+            //trim the line to remove any leading or trailing whitespace
+            line = line.trim();
+            if (line.isEmpty()) {
+                continue; // Skip empty lines
+            }
+
+            //Split the line by semicolon
+            String[] triplet = line.split(";");
+
+            //check if the pair is composed of 2 value
+            try {
+                if (triplet.length != 3) {
+                    return false;
+                }
+            }
+            catch (IllegalArgumentException | NullPointerException e) {
+                e.printStackTrace();
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Method takes a list of CSV files as input and concatenates their contents
      * into a single file.
      *
