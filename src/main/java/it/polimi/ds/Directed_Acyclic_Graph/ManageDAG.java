@@ -108,6 +108,13 @@ public class ManageDAG {
 
         // TODO: how to decide how many checkpoints are needed
         this.assignCheckpoint(2);
+
+        int taskManagerID = 0;
+        taskIsInTaskManager.put(0, taskManagerID);
+        for (int i = 1; i < maxTasksPerTaskManger * numberOftasksManagers; i++) {
+            System.out.println(i % maxTasksPerTaskManger);
+            taskIsInTaskManager.put(i, (i + 1) % maxTasksPerTaskManger == 0 ? taskManagerID++ : taskManagerID);
+        }
     }
 
     /**
@@ -515,6 +522,7 @@ public class ManageDAG {
 
     // TODO: Set Id to Long
     public List<Long> getTasksOfTaskManager(int taskManagerId) {
+        System.out.println("t in tm: " + taskIsInTaskManager);
         return taskIsInTaskManager
                 .keySet()
                 .stream()

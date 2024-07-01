@@ -97,6 +97,7 @@ public class Coordinator {
                 System.exit(0);
             }
 
+            System.out.println("workers: " + workers.size());
             startWorker();
 
             /// Allocate the WokerManagers on the appropriate allocators
@@ -216,6 +217,7 @@ public class Coordinator {
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
             var operations = dag.getOperationsForTaskManager(id);
 
+            System.out.println("id: " + id + " tasks: " + tasks + " operations: " + operations);
             /// WARNING: I don't want to touch this thing, I'm scared of it
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)

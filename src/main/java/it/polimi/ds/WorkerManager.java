@@ -2,6 +2,7 @@ package it.polimi.ds;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
@@ -71,6 +72,7 @@ public class WorkerManager {
     }
 
     public WorkerManager(String[] args) throws IOException {
+        System.out.println("args: " + Arrays.toString(args));
         coordinator_address = Address.fromString(args[0]).getValue0();
         coordinator = new Node(coordinator_address);
 
@@ -82,10 +84,13 @@ public class WorkerManager {
         data_listener = new ServerSocket(DATA_PORT);
         data_communicator.start();
 
+        //TODO error here
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
+
+        System.out.println(resp + "qui: " + id + " " + computations + " " + group_size);
 
         for (ProtoTask t : resp.getTasksList()) {
             Task task = new Task(t.getId(),
@@ -127,6 +132,10 @@ public class WorkerManager {
                             }
                         });
             }));
+
+            for (Thread thread : task_threads) {
+                thread.start();
+            }
         }
     }
 
@@ -162,6 +171,7 @@ public class WorkerManager {
     /// the case of the initialization, the coordinator. This expects to receive the
     /// DAG information to handle the tasks
     Thread data_communicator = new Thread(() -> {
+        System.out.println("eccomi");
         try {
             while (true) {
                 Node conn = new Node(data_listener.accept());
