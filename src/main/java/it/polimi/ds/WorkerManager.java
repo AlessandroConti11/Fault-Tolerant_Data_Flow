@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentMap;
 import com.google.protobuf.ByteString;
 
 import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.ProtoTask;
@@ -113,7 +114,12 @@ public class WorkerManager {
                                 Node conn = new Node(successor);
                                 conn.send(DataRequest.newBuilder()
                                         .setTaskId(task.getId())
-                                        .addAllData(result)
+                                        .addAllData(result.stream()
+                                                .map(p -> Data.newBuilder()
+                                                        .setKey(p.getValue0())
+                                                        .setValue(p.getValue1())
+                                                        .build())
+                                                .toList())
                                         .build());
                                 conn.close();
                             } catch (IOException e) {

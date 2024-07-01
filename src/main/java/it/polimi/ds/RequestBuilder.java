@@ -14,6 +14,7 @@ import it.polimi.ds.proto.AllocationResponse;
 import it.polimi.ds.proto.ClientRequest;
 import it.polimi.ds.proto.CloseRequest;
 import it.polimi.ds.proto.CloseResponse;
+import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import org.javatuples.Pair;
@@ -35,7 +36,12 @@ public class RequestBuilder {
             coordinator.send(ClientRequest.newBuilder()
                     .setDataRequest(DataRequest.newBuilder()
                             .setTaskId(-1)
-                            .addAllData(data)
+                            .addAllData(data.stream()
+                                    .map(d -> Data.newBuilder()
+                                            .setKey(d.getValue0())
+                                            .setValue(d.getValue1())
+                                            .build())
+                                    .collect(Collectors.toList()))
                             .build())
                     .build());
 
