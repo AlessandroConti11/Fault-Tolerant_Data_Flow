@@ -5,6 +5,7 @@ import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
+import it.polimi.ds.proto.CheckpointRequest;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 import org.javatuples.Tuple;
@@ -72,6 +73,12 @@ public class ManageDAG {
      * Data to be computed.
      */
     private List<Pair<Integer, Integer>> data = new ArrayList<>();
+
+    /**
+     * Last checkpoint - group id, data, operation.
+     */
+    private Pair<Long, List<Pair<Integer, Integer>>> lastCheckpoint;
+
 
     /**
      * Constructor
@@ -538,6 +545,28 @@ public class ManageDAG {
 
         return operations;
     }
+
+
+    /**
+     * Saves the current state of data and operations at a specific checkpoint.
+     *
+     * @param checkpointRequest the request object containing the group ID, data, and list of operations to be saved.
+     */
+    public void saveCheckpoint(CheckpointRequest checkpointRequest) {
+        if (this.lastCheckpoint.getValue0() != checkpointRequest.getGroupId()) {
+            //Save the data.
+            List<Pair<Integer, Integer>> dataCheckpoint = ManageCSVfile.readCSVinput(checkpointRequest.getDataList());
+            this.lastCheckpoint = new Pair<>(checkpointRequest.getGroupId(), dataCheckpoint);
+        }
+        else {
+            //Add the data.
+            List<Pair<Integer, Integer>> dataCheckpoint = this.lastCheckpoint.getValue1();
+            dataCheckpoint.addAll(ManageCSVfile.readCSVinput(checkpointRequest.getDataList()));
+            this.lastCheckpoint.setAt1(dataCheckpoint);
+        }
+    }
+
+
 
     /*
      * insieme 1 --> insieme 2 -->

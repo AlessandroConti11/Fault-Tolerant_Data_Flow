@@ -1,6 +1,7 @@
 package it.polimi.ds;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Vector;
 import java.util.stream.Collectors;
 
@@ -15,6 +16,7 @@ import it.polimi.ds.proto.CloseRequest;
 import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
+import org.javatuples.Pair;
 
 public class RequestBuilder {
     class Request {
@@ -29,11 +31,11 @@ public class RequestBuilder {
             return responses;
         }
 
-        public Object sendData(ByteString data) throws IOException {
+        public Object sendData(List<Pair<Integer, Integer>> data) throws IOException {
             coordinator.send(ClientRequest.newBuilder()
                     .setDataRequest(DataRequest.newBuilder()
                             .setTaskId(-1)
-                            .setData(data)
+                            .addAllData(data)
                             .build())
                     .build());
 

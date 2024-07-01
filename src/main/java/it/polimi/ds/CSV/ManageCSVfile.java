@@ -6,6 +6,7 @@ import com.opencsv.exceptions.CsvException;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.Operation;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
@@ -73,36 +74,12 @@ public class ManageCSVfile {
      * @param data the CSV input file.
      * @return the input tuple.
      */
-    public static List<Pair<Integer, Integer>> readCSVinput(ByteString data) {
+    public static List<Pair<Integer, Integer>> readCSVinput(List<Data> data) {
         //The list of pair key, value to return.
         List<Pair<Integer, Integer>> result = new ArrayList<>();
-        //Convert ByteString to String.
-        String string = data.toString(StandardCharsets.UTF_8);
-        //Split the String by lines.
-        String[] lines = string.split("\n");
 
-        //for each line
-        for (String line : lines) {
-            //trim the line to remove any leading or trailing whitespace
-            line = line.trim();
-            if (line.isEmpty()) {
-                continue; // Skip empty lines
-            }
-
-            //Split the line by semicolon
-            String[] pair = line.split(";");
-
-            //check if the pair is composed of 2 value
-            try {
-                if (pair.length != 2) {
-                    throw new IllegalArgumentException();
-                }
-                //add the pair in the result
-                result.add(new Pair<>(Integer.parseInt(pair[0].trim()), Integer.parseInt(pair[1].trim())));
-            }
-            catch (IllegalArgumentException | NullPointerException e) {
-                e.printStackTrace();
-            }
+        for (Data d : data) {
+            result.add(new Pair<>(d.getKey(), d.getValue()));
         }
 
         return result;

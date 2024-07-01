@@ -113,8 +113,7 @@ public class WorkerManager {
                                 Node conn = new Node(successor);
                                 conn.send(DataRequest.newBuilder()
                                         .setTaskId(task.getId())
-                                        // TODO: Fix type
-                                        .setData(ByteString.copyFromUtf8(result.toString()))
+                                        .addAllData(result)
                                         .build());
                                 conn.close();
                             } catch (IOException e) {
@@ -163,12 +162,12 @@ public class WorkerManager {
 
                 try {
                     var req = conn.receive(DataRequest.class);
-                    System.out.println("Received data request" + req.getData());
+                    System.out.println("Received data request" + req.getDataList());
                     // TODO: Maybe put some queue to hold the data until it can receive the new data
                     // for the task
 
                     // TODO: Change types
-                    getTask(req.getTaskId()).addData(req.getData().toStringUtf8());
+                    getTask(req.getTaskId()).addData(req.getDataList());
 
                     conn.close();
                 } catch (IOException e) {

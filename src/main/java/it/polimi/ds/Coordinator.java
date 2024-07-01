@@ -100,9 +100,9 @@ public class Coordinator {
                 try {
                     var req = client.receive(ClientRequest.class);
                     if (req.hasDataRequest()) {
-                        System.out.println("Received data request " + req.getDataRequest().getData().toStringUtf8());
+                        System.out.println("Received data request " + req.getDataRequest().getDataList());
 
-                        dag.setData(ManageCSVfile.readCSVinput(req.getDataRequest().getData()));
+                        dag.setData(ManageCSVfile.readCSVinput(req.getDataRequest().getDataList()));
 
                         dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
                             try {

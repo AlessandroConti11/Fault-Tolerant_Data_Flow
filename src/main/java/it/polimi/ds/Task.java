@@ -1,11 +1,11 @@
 package it.polimi.ds;
 
-import com.google.protobuf.ByteString;
 import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.Data;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
@@ -20,7 +20,7 @@ class Task {
 
     private volatile boolean has_all_data = false;
     private int data_count = 0;
-    private Object data;
+    private List<Data> data;
 
     public Task(long id, long group_id, Computation computation, boolean is_checkpoint, int group_size) {
         this.id = id;
@@ -53,8 +53,8 @@ class Task {
     }
 
     // TODO: Change object to the correct type.
-    public void addData(Object data) {
-        this.data = data;
+    public void addData(List<Data> data) {
+        this.data.addAll(data);
         data_count++;
         if (data_count == group_size) {
             has_all_data = true;
@@ -76,7 +76,7 @@ class Task {
      */
     public List<Pair<Integer, Integer>> execute() {
         // Data to compute.
-        List<Pair<Integer, Integer>> dataToCompute = ManageCSVfile.readCSVinput((ByteString) data);
+        List<Pair<Integer, Integer>> dataToCompute = ManageCSVfile.readCSVinput(data);
         // Operation to be performed on data.
         List<Triplet<OperatorName, FunctionName, Integer>> operationToCompute = ManageCSVfile
                 .readCSVoperation(computation);
