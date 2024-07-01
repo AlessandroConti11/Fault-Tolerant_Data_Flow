@@ -7,6 +7,8 @@ import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.CheckpointRequest;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 import org.javatuples.Tuple;
@@ -16,12 +18,13 @@ import com.google.protobuf.ByteString;
 import java.util.*;
 
 public class ManageDAG {
+    private static final Log log = LogFactory.getLog(ManageDAG.class);
     /**
      * Number of Task Manager in the directed acyclic graph.
      */
     private int numberOfTaskManager = 0;
 
-    private Vector<Integer> freeTaskManagers = new Vector<>();
+    private Vector<Long> freeTaskManagers = new Vector<>();
 
     /**
      * Total number of Task.
@@ -34,28 +37,28 @@ public class ManageDAG {
     /**
      * Map between the TaskManagerID and the number of Task per TaskManager.
      */
-    private HashMap<Integer, Integer> taskPerTaskManager = new HashMap<>();
+    private HashMap<Long, Integer> taskPerTaskManager = new HashMap<>();
 
     /**
      * Map between the TaskID and the TaskManagerID.
      */
-    private HashMap<Integer, Integer> taskIsInTaskManager = new HashMap<>();
+    private HashMap<Long, Long> taskIsInTaskManager = new HashMap<>();
 
     /**
      * Map of groups and TaskIDs are assigned for each group.
      */
-    private HashMap<Integer, HashSet<Integer>> tasksInGroup = new HashMap<>();
+    private HashMap<Long, HashSet<Long>> tasksInGroup = new HashMap<>();
 
     /**
      * Map the actual group and its follower group.
      * Value = -1 if and only if the follower is the coordinator.
      */
-    private HashMap<Integer, Integer> followerGroup = new HashMap<>();
+    private HashMap<Long, Long> followerGroup = new HashMap<>();
 
     /**
      * Set of checkpoints group.
      */
-    private HashSet<Integer> checkPoints = new HashSet<>();
+    private HashSet<Long> checkPoints = new HashSet<>();
 
     /**
      * List of operations to be calculated in a single operation group.
@@ -96,9 +99,9 @@ public class ManageDAG {
             throw new Exceptions.NotEnoughResourcesException();
         }
 
-        int taskManagerID = 0;
-        taskIsInTaskManager.put(0, taskManagerID);
-        for (int i = 1; i < maxTasksPerTaskManger * numberOftasksManagers; i++) {
+        long taskManagerID = 0;
+        taskIsInTaskManager.put(0L, taskManagerID);
+        for (long i = 1L; i < (long) maxTasksPerTaskManger * numberOftasksManagers; i++) {
             taskIsInTaskManager.put(i, (i + 1) % maxTasksPerTaskManger == 0 ? taskManagerID++ : taskManagerID);
         }
 
@@ -134,7 +137,7 @@ public class ManageDAG {
      * @return the map between the TaskManagerID and the number of Task per
      *         TaskManager.
      */
-    public HashMap<Integer, Integer> getTaskPerTaskManager() {
+    public HashMap<Long, Integer> getTaskPerTaskManager() {
         return taskPerTaskManager;
     }
 
@@ -171,7 +174,7 @@ public class ManageDAG {
      *
      * @return the map between the TaskID and the TaskManagerID.
      */
-    public HashMap<Integer, Integer> getTaskIsInTaskManager() {
+    public HashMap<Long, Long> getTaskIsInTaskManager() {
         return taskIsInTaskManager;
     }
 
@@ -180,11 +183,11 @@ public class ManageDAG {
      *
      * @return the map of all group and Task per group.
      */
-    public HashMap<Integer, HashSet<Integer>> getTasksInGroup() {
+    public HashMap<Long, HashSet<Long>> getTasksInGroup() {
         return tasksInGroup;
     }
 
-    public HashSet<Integer> getTasksOfGroup(int groupId) {
+    public HashSet<Long> getTasksOfGroup(long groupId) {
         return tasksInGroup.get(groupId);
     }
 
@@ -193,7 +196,7 @@ public class ManageDAG {
      *
      * @return the set of checkpoints group.
      */
-    public HashSet<Integer> getCheckPoints() {
+    public HashSet<Long> getCheckPoints() {
         return checkPoints;
     }
 
@@ -202,7 +205,7 @@ public class ManageDAG {
      *
      * @return the followers of the groups.
      */
-    public HashMap<Integer, Integer> getFollowerGroup() {
+    public HashMap<Long, Long> getFollowerGroup() {
         return followerGroup;
     }
 
@@ -218,13 +221,13 @@ public class ManageDAG {
         this.numberOfTaskManager = numberOfTM;
 
         if (oldNumberOfTaskManager < numberOfTM) {
-            for (int i = oldNumberOfTaskManager; i < numberOfTM; i++) {
+            for (long i = oldNumberOfTaskManager; i < numberOfTM; i++) {
                 freeTaskManagers.add(i);
             }
         }
     }
 
-    public void addFreeTaskManager(int taskManagerId) {
+    public void addFreeTaskManager(long taskManagerId) {
         freeTaskManagers.add(taskManagerId);
     }
 
@@ -244,7 +247,7 @@ public class ManageDAG {
      * @param taskPerTaskManager the map between the TaskManagerID and the number of
      *                           Task per TaskManager.
      */
-    public void setTaskPerTaskManager(HashMap<Integer, Integer> taskPerTaskManager) {
+    public void setTaskPerTaskManager(HashMap<Long, Integer> taskPerTaskManager) {
         this.taskPerTaskManager = taskPerTaskManager;
     }
 
@@ -273,7 +276,7 @@ public class ManageDAG {
      *
      * @param taskIsInTaskManager the map between the TaskID and the TaskManagerID.
      */
-    public void setTaskIsInTaskManager(HashMap<Integer, Integer> taskIsInTaskManager) {
+    public void setTaskIsInTaskManager(HashMap<Long, Long> taskIsInTaskManager) {
         this.taskIsInTaskManager = taskIsInTaskManager;
     }
 
@@ -282,7 +285,7 @@ public class ManageDAG {
      *
      * @param tasksInGroup the map of all group and Task per group.
      */
-    public void setTasksInGroup(HashMap<Integer, HashSet<Integer>> tasksInGroup) {
+    public void setTasksInGroup(HashMap<Long, HashSet<Long>> tasksInGroup) {
         this.tasksInGroup = tasksInGroup;
     }
 
@@ -291,7 +294,7 @@ public class ManageDAG {
      *
      * @param checkPoints the set of checkpoints group.
      */
-    public void setCheckPoints(HashSet<Integer> checkPoints) {
+    public void setCheckPoints(HashSet<Long> checkPoints) {
         this.checkPoints = checkPoints;
     }
 
@@ -300,7 +303,7 @@ public class ManageDAG {
      *
      * @param followerGroup the followers of the groups.
      */
-    public void setFollowerGroup(HashMap<Integer, Integer> followerGroup) {
+    public void setFollowerGroup(HashMap<Long, Long> followerGroup) {
         this.followerGroup = followerGroup;
     }
 
@@ -309,7 +312,7 @@ public class ManageDAG {
      *
      * @param taskManager the Task Manager to add.
      */
-    public void addTaskManager(Pair<Integer, Integer> taskManager) {
+    public void addTaskManager(Pair<Long, Integer> taskManager) {
         this.taskPerTaskManager.put(taskManager.getValue0(), taskManager.getValue1());
         this.numberOfTask += taskManager.getValue1();
         this.numberOfTaskManager++;
@@ -320,7 +323,7 @@ public class ManageDAG {
      *
      * @param taskManager the Task Manager ID.
      */
-    public void removeTaskManager(Integer taskManager) {
+    public void removeTaskManager(Long taskManager) {
         this.numberOfTask -= this.taskPerTaskManager.get(taskManager);
         this.taskPerTaskManager.remove(taskManager);
         this.numberOfTaskManager--;
@@ -332,7 +335,7 @@ public class ManageDAG {
      * @param taskManager the Task Manager ID.
      * @param taskToAdd   the number of Tasks to add.
      */
-    public void addTask(Integer taskManager, Integer taskToAdd) {
+    public void addTask(Long taskManager, Integer taskToAdd) {
         this.taskPerTaskManager.replace(taskManager, this.taskPerTaskManager.get(taskManager) + taskToAdd);
         this.numberOfTask += taskToAdd;
     }
@@ -343,7 +346,7 @@ public class ManageDAG {
      * @param taskManagerId the Task Manager ID.
      * @param taskId        the Task ID.
      */
-    public void addTask(Integer taskManagerId, int taskId) {
+    public void addTask(Long taskManagerId, long taskId) {
         this.taskPerTaskManager.replace(taskManagerId, this.taskPerTaskManager.get(taskManagerId) + 1);
         this.numberOfTask++;
         this.taskIsInTaskManager.put(taskId, taskManagerId);
@@ -355,7 +358,7 @@ public class ManageDAG {
      * @param taskManager  the Task Manager ID.
      * @param taskToRemove the number of Tasks to remove.
      */
-    public void removeTask(Integer taskManager, Integer taskToRemove) {
+    public void removeTask(Long taskManager, Integer taskToRemove) {
         this.taskPerTaskManager.replace(taskManager, this.taskPerTaskManager.get(taskManager) - taskToRemove);
         this.numberOfTask -= taskToRemove;
     }
@@ -366,7 +369,7 @@ public class ManageDAG {
      * @param taskManagerId the Task Manager ID.
      * @param taskId        the Task ID.
      */
-    public void removeTask(Integer taskManagerId, int taskId) {
+    public void removeTask(Long taskManagerId, long taskId) {
         this.taskPerTaskManager.replace(taskManagerId, this.taskPerTaskManager.get(taskManagerId) - 1);
         this.numberOfTask--;
         this.taskIsInTaskManager.remove(taskId);
@@ -433,17 +436,17 @@ public class ManageDAG {
      */
     public void divideTaskInGroup() {
         //Set of tasks in the group.
-        HashSet<Integer> task = new HashSet<>();
+        HashSet<Long> task = new HashSet<>();
         //Assignment of tasks to a group
-        HashMap<Integer, HashSet<Integer>> tg = new HashMap<>();
+        HashMap<Long, HashSet<Long>> tg = new HashMap<>();
         //Group id.
-        int gid = 0;
+        long gid = 0;
         //Follower group
-        HashMap<Integer, Integer> nextGroup = new HashMap<>();
+        HashMap<Long, Long> nextGroup = new HashMap<>();
 
         //assign tasks to group id
-        task.add(0);
-        for (int i = 1; i < this.numberOfTask; i++) {
+        task.add(0L);
+        for (long i = 1L; i < this.numberOfTask; i++) {
             if ((task.size() % this.maxTasksPerGroup) == 0){
                 tg.put(gid, task);
                 nextGroup.put(gid, gid + 1);
@@ -452,7 +455,7 @@ public class ManageDAG {
             }
             task.add(i);
         }
-        nextGroup.put(gid - 1, -1);
+        nextGroup.put(gid - 1, -1L);
 
         //set tasks to a group
         this.setTasksInGroup(tg);
@@ -468,7 +471,7 @@ public class ManageDAG {
      */
     public void assignCheckpoint(int numberOfCheckpoint) {
         // Checkpoints.
-        HashSet<Integer> cp = new HashSet<>();
+        HashSet<Long> cp = new HashSet<>();
 
         if (numberOfCheckpoint > this.operationsGroup.size()) {
             // assigns each group as a checkpoint
@@ -476,7 +479,7 @@ public class ManageDAG {
         } else {
             // Index.
             int i = 0;
-            for (Integer groupID : tasksInGroup.keySet()) {
+            for (Long groupID : tasksInGroup.keySet()) {
                 // assigns as checkpoints only checkpoints that are multiple of the required
                 // number of checkpoints
                 if (i % (this.operationsGroup.size() / numberOfCheckpoint) == 0) {
@@ -490,7 +493,7 @@ public class ManageDAG {
         this.setCheckPoints(cp);
     }
 
-    public Optional<Integer> getNextFreeTaskManager() {
+    public Optional<Long> getNextFreeTaskManager() {
         if (freeTaskManagers.size() > 0) {
             return Optional.of(freeTaskManagers.remove(freeTaskManagers.size() - 1));
         }
@@ -499,17 +502,16 @@ public class ManageDAG {
     }
 
     public Optional<Long> groupFromTask(long taskId) {
-        for (Integer group : tasksInGroup.keySet()) {
-            if (tasksInGroup.get(group).contains((int) taskId)) {
-                return Optional.of(Long.valueOf(group));
+        for (Long group : tasksInGroup.keySet()) {
+            if (tasksInGroup.get(group).contains(taskId)) {
+                return Optional.of(group);
             }
         }
 
         return Optional.empty();
     }
 
-    // TODO: Set Id to Long
-    public List<Long> getTasksOfTaskManager(int taskManagerId) {
+    public List<Long> getTasksOfTaskManager(long taskManagerId) {
         return taskIsInTaskManager
                 .keySet()
                 .stream()
@@ -518,9 +520,8 @@ public class ManageDAG {
                 .toList();
     }
 
-    // TODO: Set Id to Long
-    public Set<Long> getManagersOfNextGroup(int group_id) {
-        var nextTasks = tasksInGroup.get((int) (long) group_id + 1)
+    public Set<Long> getManagersOfNextGroup(long group_id) {
+        var nextTasks = tasksInGroup.get(group_id + 1)
                 .stream()
                 .map(t -> taskIsInTaskManager.get(t))
                 .map(Long::valueOf)
@@ -540,10 +541,10 @@ public class ManageDAG {
      * @param taskManager the task manager id.
      * @return the set of task id that are managed by the task manager.
      */
-    public Set<Integer> getTaskInTaskManager(long taskManager) {
-        Set<Integer> result = new HashSet<>();
+    public Set<Long> getTaskInTaskManager(long taskManager) {
+        Set<Long> result = new HashSet<>();
 
-        for (Map.Entry<Integer, Integer> entry : taskIsInTaskManager.entrySet()) {
+        for (Map.Entry<Long, Long> entry : taskIsInTaskManager.entrySet()) {
             if (entry.getValue() == taskManager) {
                 result.add(entry.getKey());
             }
@@ -552,32 +553,52 @@ public class ManageDAG {
         return result;
     }
 
+    /**
+     * Retrieves the list of operations assigned to a specific task manager.
+     *
+     * @param taskManagerId the task manager.
+     * @return the list of operations to be performed by the tasks managed by a worker manager according to their group membership.
+     */
     public List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> getOperationsForTaskManager(long taskManagerId) {
         List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> operations = new ArrayList<>();
 
         // Get the tasks of the task manager
         List<Long> tasks = getTasksOfTaskManager((int) taskManagerId);
-        // Get the group of the task
-//        List<Long> groups = tasks.stream().map(this::groupFromTask).map(Optional::get).toList();
-        List<Integer> groups = groupsThatHaveTaskManagedByTM(taskManagerId);
+        // Get the groups of the task
+        List<Long> groups = getGroupsOfTaskManager(taskManagerId);
         // Get the operations of the group
-//        for (Long group : groups) {
-//            operations.add(new Pair<>(operationsGroup.get((int) (long) group), group));
-//        }
+        for (Long group : groups) {
+            operations.add(new Pair<>(operationsGroup.get((int) (long) group), group));
+        }
 
         return operations;
     }
 
-    public List<Integer> groupsThatHaveTaskManagedByTM(long taskManagerId) {
-        List<Integer> result = new ArrayList<>();
-        //Set of all task in the task manager.
-        Set<Integer> task = getTaskInTaskManager(taskManagerId);
+    /**
+     * Gets groups where there are tasks that are managed by a task manager.
+     *
+     * @param taskManagerId the task manager to find.
+     * @return the groups where there are tasks that are managed by the task manager
+     */
+    private List<Long> getGroupsOfTaskManager(long taskManagerId) {
+        List<Long> result = new ArrayList<>();
 
-        for (Integer groupID : tasksInGroup.keySet()) {
-            Set<Integer> value = tasksInGroup.get(groupID);
-            for (Integer taskID : task) {
-                if (value.contains(taskID)) {
-                    result.add(groupID);
+        //Find all tasks in a task manager.
+        List<Long> matchingTid = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : taskIsInTaskManager.entrySet()) {
+            if (entry.getValue() == taskManagerId) {
+                matchingTid.add(entry.getKey());
+            }
+        }
+
+        //find all group that contains
+        for (Map.Entry<Long, HashSet<Long>> entry : tasksInGroup.entrySet()) {
+            HashSet<Long> tIds = entry.getValue();
+
+            for (Long id : matchingTid) {
+                if (tIds.contains(id)) {
+                    result.add(entry.getKey());
+                    break;
                 }
             }
         }
