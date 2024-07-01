@@ -17,7 +17,7 @@ public class Client {
     public static void main(String[] args) throws UnknownHostException, IOException {
         Request request = new RequestBuilder()
                 .setAllocations(1)
-                .setProgram(ByteString.copyFromUtf8("Hello World!"))
+                .setProgram(ByteString.copyFromUtf8("map;add;6"))
                 .addAllocators(Arrays.asList(args).stream()
                         .map(Address::fromStringIp)
                         .map(a -> a.getValue0().withPort(Allocator.PORT))
@@ -25,6 +25,9 @@ public class Client {
                 .allocate();
 
         List<Pair<Integer, Integer>> data = new ArrayList<>();
+
+        data.add(new Pair<>(1, 1));
+        data.add(new Pair<>(2, 2));
 
         request.sendData(data);
         // request.sendData(ByteString.copyFromUtf8("Hello World!"));

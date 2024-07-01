@@ -33,7 +33,6 @@ import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.ReturnCode;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
-import it.polimi.ds.proto.WorkerManagerRequest;
 
 public class Coordinator {
 
@@ -86,9 +85,10 @@ public class Coordinator {
 
             /// Create the schedule of the program using a DAG
             program = allocation_request.getRawProgram();
-            dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
-            startWorker();
-            if (false) {
+            try {
+                dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
+            }
+            catch (Exceptions.MalformedProgramFormatException e) {
                 client.send(AllocationResponse.newBuilder()
                         .setCode(ReturnCode.INVALID_PROGRAM)
                         .build());
@@ -96,6 +96,8 @@ public class Coordinator {
                 client.close();
                 System.exit(0);
             }
+
+            startWorker();
 
             /// Allocate the WokerManagers on the appropriate allocators
             allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
@@ -149,11 +151,12 @@ public class Coordinator {
         try {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
             while (true) {
+                Node node = new Node(workerListener.accept());
                 long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO: Handle this case, in theory it should
                                                                       // never happen, but you never know. This happens
                                                                       // when we initialize to many workerManagers
                                                                       // somehow
-                workers.put(id, new WorkerManagerHandler(new Node(workerListener.accept()), id));
+                workers.put(id, new WorkerManagerHandler(node, id));
                 executors.submit(workers.get(id));
             }
         } catch (Exception e) {

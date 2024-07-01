@@ -25,7 +25,7 @@ public class ManageDAG {
     /**
      * Number of Task Manager in the directed acyclic graph.
      */
-    private int numberOfTaskManager;
+    private int numberOfTaskManager = 0;
 
     private Vector<Integer> freeTaskManagers = new Vector<>();
 
@@ -89,7 +89,7 @@ public class ManageDAG {
             throw new Exceptions.MalformedProgramFormatException();
         }
 
-        this.setNumberOfTaskManager(numberOfTaskManager);
+        this.setNumberOfTaskManager(numberOftasksManagers);
 
         // divide operation into subgroups ending with a Change Key & define the number
         // of operation group needed.
@@ -210,16 +210,16 @@ public class ManageDAG {
     /**
      * Setter --> sets the number of Task Manager in the directed acyclic graph.
      *
-     * @param numberOfTaskManager the number of Task Manager in the directed acyclic
+     * @param numberOfTM the number of Task Manager in the directed acyclic
      *                            graph.
      */
-    public void setNumberOfTaskManager(int numberOfTaskManager) {
+    public void setNumberOfTaskManager(int numberOfTM) {
         int oldNumberOfTaskManager = this.numberOfTaskManager;
 
-        this.numberOfTaskManager = numberOfTaskManager;
+        this.numberOfTaskManager = numberOfTM;
 
-        if (oldNumberOfTaskManager < numberOfTaskManager) {
-            for (int i = oldNumberOfTaskManager; i < numberOfTaskManager; i++) {
+        if (oldNumberOfTaskManager < numberOfTM) {
+            for (int i = oldNumberOfTaskManager; i < numberOfTM; i++) {
                 freeTaskManagers.add(i);
             }
         }
