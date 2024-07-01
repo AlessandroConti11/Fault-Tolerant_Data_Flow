@@ -1,51 +1,51 @@
-    package it.polimi.ds;
+package it.polimi.ds;
 
-    import java.io.BufferedReader;
-    import java.io.InputStreamReader;
-    import java.io.IOException;
-    import java.net.ServerSocket;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
+import java.net.ServerSocket;
 
-    import it.polimi.ds.proto.AllocateNodeManagerRequest;
-    import it.polimi.ds.proto.AllocateNodeManagerResponse;
-    import it.polimi.ds.proto.NodeManagerInfo;
+import it.polimi.ds.proto.AllocateNodeManagerRequest;
+import it.polimi.ds.proto.AllocateNodeManagerResponse;
+import it.polimi.ds.proto.NodeManagerInfo;
 
-    public class Allocator {
+public class Allocator {
 
-        public static final int PORT = 9090;
-        public static int procCounter = 0;
+    public static final int PORT = 9090;
+    public static int procCounter = 0;
 
-        public static void main(String[] args) throws IOException {
-            ServerSocket listener = new ServerSocket(PORT);
-            ProcessBuilder process_builder = new ProcessBuilder("mvn")
-                    .redirectErrorStream(true);
+    public static void main(String[] args) throws IOException {
+        ServerSocket listener = new ServerSocket(PORT);
+        ProcessBuilder process_builder = new ProcessBuilder("mvn")
+                .redirectErrorStream(true);
 
-            System.out.println("Server is running on " + Address.getOwnAddress().toString());
+        System.out.println("Server is running on " + Address.getOwnAddress().toString());
 
-            while (true) {
-                Node conn = new Node(listener.accept());
-                procCounter++;
-                int procId = procCounter;
+        while (true) {
+            Node conn = new Node(listener.accept());
+            procCounter++;
+            int procId = procCounter;
 
-                new Thread(() -> {
-                    try {
-                        var req = conn.receive(AllocateNodeManagerRequest.class);
-                        if (req.hasCoordinator() && req.getCoordinator() == true) {
-                            System.out.println("Coordinator");
+            new Thread(() -> {
+                try {
+                    var req = conn.receive(AllocateNodeManagerRequest.class);
+                    if (req.hasCoordinator() && req.getCoordinator() == true) {
+                        System.out.println("Coordinator");
 
-                            Process proc = process_builder
-                                    .command("java", "-jar", "target/coordinator.jar")
-                                    .redirectOutput(ProcessBuilder.Redirect.PIPE)
-                                    .start();
+                        Process proc = process_builder
+                                .command("java", "-jar", "target/coordinator.jar")
+                                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                                .start();
 
-                                BufferedReader reader = new BufferedReader(
-                                    new InputStreamReader(proc.getInputStream()));
+                        BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(proc.getInputStream()));
 
-                            String line = reader.readLine();
-                            Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
+                        String line = reader.readLine();
+                        Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
 
-                            conn.send(AllocateNodeManagerResponse.newBuilder()
-                                    .setAddress(coord_addr.toProto())
-                                    .build());
+                        conn.send(AllocateNodeManagerResponse.newBuilder()
+                                .setAddress(coord_addr.toProto())
+                                .build());
 
                         spoofOutput(proc,
                                 "[" + colors[procId % colors.length] + "COORDINATOR(" + procId + ")" + RESET + "] ");
@@ -59,7 +59,8 @@
                                     .start();
 
                             spoofOutput(proc,
-                                    "[" + colors[procId % colors.length] + "WORKER(" + procId + ")" + RESET + "] ");
+                                    "[" + colors[(procId + i) % colors.length] + "WORKER(" + (procId + i) + ")" + RESET
+                                            + "] ");
                         }
 
                         conn.send(AllocateNodeManagerResponse.newBuilder().build());
