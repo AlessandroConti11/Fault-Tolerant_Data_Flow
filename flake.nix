@@ -13,7 +13,7 @@
     {
       devShells = forEachSupportedSystem ({ pkgs }: {
         default = pkgs.mkShell {
-          packages = with pkgs; [ jdk maven protobuf ];
+          packages = with pkgs; [ jdk maven protobuf_21 ];
         };
       });
     };
