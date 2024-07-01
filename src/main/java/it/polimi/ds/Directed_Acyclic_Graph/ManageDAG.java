@@ -7,18 +7,14 @@ import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.CheckpointRequest;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
-import org.javatuples.Tuple;
 
 import com.google.protobuf.ByteString;
 
 import java.util.*;
 
 public class ManageDAG {
-    private static final Log log = LogFactory.getLog(ManageDAG.class);
     /**
      * Number of Task Manager in the directed acyclic graph.
      */
@@ -76,7 +72,6 @@ public class ManageDAG {
      * Last checkpoint - group id, data, operation.
      */
     private Pair<Long, List<Pair<Integer, Integer>>> lastCheckpoint;
-
 
     /**
      * Constructor
@@ -213,7 +208,7 @@ public class ManageDAG {
      * Setter --> sets the number of Task Manager in the directed acyclic graph.
      *
      * @param numberOfTM the number of Task Manager in the directed acyclic
-     *                            graph.
+     *                   graph.
      */
     public void setNumberOfTaskManager(int numberOfTM) {
         int oldNumberOfTaskManager = this.numberOfTaskManager;
@@ -228,6 +223,10 @@ public class ManageDAG {
     }
 
     public void addFreeTaskManager(long taskManagerId) {
+        if (numberOfTaskManager <= taskManagerId) {
+            throw new NoSuchElementException("Task Manager ID is not valid");
+        }
+
         freeTaskManagers.add(taskManagerId);
     }
 
@@ -412,7 +411,12 @@ public class ManageDAG {
                 op = new ArrayList<>();
             }
         }
-        operationsGroup.add(op);
+
+        /// Only if there is some left-over operation, then make a new group. As an
+        /// exception, if there are no operations, then make a new group.
+        if (op.size() > 0 || operationsGroup.size() == 0) {
+            operationsGroup.add(op);
+        }
 
         // sets operation groups & the number of group needed.
         setOperationsGroup(operationsGroup);
@@ -435,19 +439,19 @@ public class ManageDAG {
      * computation.
      */
     public void divideTaskInGroup() {
-        //Set of tasks in the group.
+        // Set of tasks in the group.
         HashSet<Long> task = new HashSet<>();
-        //Assignment of tasks to a group
+        // Assignment of tasks to a group
         HashMap<Long, HashSet<Long>> tg = new HashMap<>();
-        //Group id.
+        // Group id.
         long gid = 0;
-        //Follower group
+        // Follower group
         HashMap<Long, Long> nextGroup = new HashMap<>();
 
-        //assign tasks to group id
+        // assign tasks to group id
         task.add(0L);
         for (long i = 1L; i < this.numberOfTask; i++) {
-            if ((task.size() % this.maxTasksPerGroup) == 0){
+            if ((task.size() % this.maxTasksPerGroup) == 0) {
                 tg.put(gid, task);
                 nextGroup.put(gid, gid + 1);
                 gid++;
@@ -457,10 +461,10 @@ public class ManageDAG {
         }
         nextGroup.put(gid - 1, -1L);
 
-        //set tasks to a group
+        // set tasks to a group
         this.setTasksInGroup(tg);
 
-        //set the next group to pass data to
+        // set the next group to pass data to
         this.setFollowerGroup(nextGroup);
     }
 
@@ -557,9 +561,11 @@ public class ManageDAG {
      * Retrieves the list of operations assigned to a specific task manager.
      *
      * @param taskManagerId the task manager.
-     * @return the list of operations to be performed by the tasks managed by a worker manager according to their group membership.
+     * @return the list of operations to be performed by the tasks managed by a
+     *         worker manager according to their group membership.
      */
-    public List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> getOperationsForTaskManager(long taskManagerId) {
+    public List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> getOperationsForTaskManager(
+            long taskManagerId) {
         List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> operations = new ArrayList<>();
 
         // Get the tasks of the task manager
@@ -583,7 +589,7 @@ public class ManageDAG {
     private List<Long> getGroupsOfTaskManager(long taskManagerId) {
         List<Long> result = new ArrayList<>();
 
-        //Find all tasks in a task manager.
+        // Find all tasks in a task manager.
         List<Long> matchingTid = new ArrayList<>();
         for (Map.Entry<Long, Long> entry : taskIsInTaskManager.entrySet()) {
             if (entry.getValue() == taskManagerId) {
@@ -591,7 +597,7 @@ public class ManageDAG {
             }
         }
 
-        //find all group that contains
+        // find all group that contains
         for (Map.Entry<Long, HashSet<Long>> entry : tasksInGroup.entrySet()) {
             HashSet<Long> tIds = entry.getValue();
 
@@ -606,27 +612,24 @@ public class ManageDAG {
         return result;
     }
 
-
     /**
      * Saves the current state of data and operations at a specific checkpoint.
      *
-     * @param checkpointRequest the request object containing the group ID, data, and list of operations to be saved.
+     * @param checkpointRequest the request object containing the group ID, data,
+     *                          and list of operations to be saved.
      */
     public void saveCheckpoint(CheckpointRequest checkpointRequest) {
         if (this.lastCheckpoint.getValue0() != checkpointRequest.getGroupId()) {
-            //Save the data.
+            // Save the data.
             List<Pair<Integer, Integer>> dataCheckpoint = ManageCSVfile.readCSVinput(checkpointRequest.getDataList());
             this.lastCheckpoint = new Pair<>(checkpointRequest.getGroupId(), dataCheckpoint);
-        }
-        else {
-            //Add the data.
+        } else {
+            // Add the data.
             List<Pair<Integer, Integer>> dataCheckpoint = this.lastCheckpoint.getValue1();
             dataCheckpoint.addAll(ManageCSVfile.readCSVinput(checkpointRequest.getDataList()));
             this.lastCheckpoint.setAt1(dataCheckpoint);
         }
     }
-
-
 
     /*
      * insieme 1 --> insieme 2 -->
