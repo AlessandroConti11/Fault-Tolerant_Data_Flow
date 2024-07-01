@@ -5,12 +5,17 @@ option java_package = "it.polimi.ds.proto";
 
 import "addr.proto";
 
+enum ReturnCode {
+  OK = 0;
+  INVALID_PROGRAM = 1;
+}
+
 message AllocationRequest {
   repeated ProtoAddress allocators = 1;
   int32 number_of_allocations = 2;
   bytes raw_program = 3;
 }
-message AllocationResponse {}
+message AllocationResponse { ReturnCode code = 1; }
 
 message ClientRequest {
   oneof request {

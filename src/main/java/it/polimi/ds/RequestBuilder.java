@@ -81,7 +81,7 @@ public class RequestBuilder {
         return this;
     }
 
-    public RequestBuilder addAllocators(Vector<Address> a) {
+    public RequestBuilder addAllocators(List<Address> a) {
         this.allocators.addAll(a);
         return this;
     }
@@ -114,6 +114,16 @@ public class RequestBuilder {
                     .build());
 
             var allocation_resp = coordinator.receive(AllocationResponse.class);
+            switch (allocation_resp.getCode()) {
+                case INVALID_PROGRAM:
+                    throw new RuntimeException("The provided program is malformed -- " + allocation_resp.getCode());
+
+                case OK:
+                    break;
+
+                default:
+                    throw new RuntimeException("Unexpected response from coordinator -- " + allocation_resp.getCode());
+            }
         } catch (IOException e) {
             System.err.println("Can't create execution plan on the coordinator -- " + e.getMessage());
             return null;

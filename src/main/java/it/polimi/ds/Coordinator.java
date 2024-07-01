@@ -31,6 +31,7 @@ import it.polimi.ds.proto.Operation;
 import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.ReturnCode;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
@@ -84,6 +85,14 @@ public class Coordinator {
             /// Create the schedule of the program using a DAG
             program = allocation_request.getRawProgram();
             dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
+            if (false) {
+                client.send(AllocationResponse.newBuilder()
+                        .setCode(ReturnCode.INVALID_PROGRAM)
+                        .build());
+
+                client.close();
+                System.exit(0);
+            }
 
             /// Allocate the WokerManagers on the appropriate allocators
             allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
