@@ -51,6 +51,9 @@ message RegisterNodeManagerRequest {
   int32 task_slots = 2;
 }
 
+message SynchRequest {}
+message SynchResponse {}
+
 message RegisterNodeManagerResponse {
   int64 id = 1;
   int32 group_size = 2;

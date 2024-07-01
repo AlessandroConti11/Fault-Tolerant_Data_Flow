@@ -17,6 +17,8 @@ import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.SynchRequest;
+import it.polimi.ds.proto.SynchResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
@@ -81,16 +83,20 @@ public class WorkerManager {
                 .setTaskSlots(TASK_SLOTS)
                 .build());
 
-        data_listener = new ServerSocket(DATA_PORT);
-        data_communicator.start();
-
-        //TODO error here
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
 
         System.out.println(resp + "qui: " + id + " " + computations + " " + group_size);
+        data_listener = new ServerSocket(WorkerManager.DATA_PORT + (int) this.id);
+
+        System.out.println("DataConnection is listeninng on "
+                + Address.getOwnAddress().withPort(WorkerManager.DATA_PORT + (int) id));
+        data_communicator.start();
+
+        coordinator.send(SynchRequest.newBuilder().build());
+        coordinator.receive(SynchResponse.class);
 
         for (ProtoTask t : resp.getTasksList()) {
             Task task = new Task(t.getId(),
@@ -116,7 +122,7 @@ public class WorkerManager {
                             }
 
                             try {
-                                Node conn = new Node(successor);
+                                Node conn = new Node(successor.withPort(DATA_PORT + (int) (long) successor_id));
                                 conn.send(DataRequest.newBuilder()
                                         .setTaskId(task.getId())
                                         .addAllData(result.stream()

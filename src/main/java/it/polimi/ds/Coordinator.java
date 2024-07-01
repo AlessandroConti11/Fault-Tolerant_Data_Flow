@@ -31,6 +31,8 @@ import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.ReturnCode;
+import it.polimi.ds.proto.SynchRequest;
+import it.polimi.ds.proto.SynchResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 
@@ -87,8 +89,7 @@ public class Coordinator {
             program = allocation_request.getRawProgram();
             try {
                 dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
-            }
-            catch (Exceptions.MalformedProgramFormatException e) {
+            } catch (Exceptions.MalformedProgramFormatException e) {
                 client.send(AllocationResponse.newBuilder()
                         .setCode(ReturnCode.INVALID_PROGRAM)
                         .build());
@@ -246,7 +247,15 @@ public class Coordinator {
                             .collect(Collectors.toList()))
                     .build());
 
-            data_connection = new Node(address.withPort(WorkerManager.DATA_PORT));
+            /// Don't start the data connection until we have received the signal from the
+            /// WorkerManager. Once we receive the signal we know that the WorkerManager is
+            /// ready to receive data and it's listening on port DATA_PORT + id
+            conn.receive(SynchRequest.class);
+            conn.send(SynchResponse.newBuilder().build());
+
+            System.out.println("Data connection with " + id + " opened on "
+                    + address.withPort(WorkerManager.DATA_PORT + (int) id));
+            data_connection = new Node(address.withPort(WorkerManager.DATA_PORT + (int) id));
 
             alive = true;
         }
