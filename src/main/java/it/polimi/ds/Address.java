@@ -119,6 +119,13 @@ public class Address {
         return String.format("%s/%d:%d", host, mask, port);
     }
 
+    public static Pair<Address, String> fromStringIp(String address) {
+        String[] parts = address.split("/");
+        int mask = Integer.parseInt(parts[1]);
+
+        return new Pair<>(new Address(parts[0], mask, 0), address.substring(parts[0].length() + 1 + parts[1].length()));
+    }
+
     public static Pair<Address, String> fromString(String address) {
         String[] parts = address.split("/");
 
