@@ -16,7 +16,7 @@ import org.javatuples.Pair;
 public class Client {
     public static void main(String[] args) throws UnknownHostException, IOException {
         Request request = new RequestBuilder()
-                .setAllocations(1)
+                .setAllocations(2)
                 .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
                         "change_key;add;70\n" +
                         "map;add;13\n" +

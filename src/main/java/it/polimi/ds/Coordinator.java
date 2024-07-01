@@ -97,6 +97,14 @@ public class Coordinator {
                 client.close();
                 System.exit(0);
             }
+            catch (Exceptions.NotEnoughResourcesException e) {
+                client.send(AllocationResponse.newBuilder()
+                        .setCode(ReturnCode.INVALID_PROGRAM)
+                        .build());
+
+                client.close();
+                System.exit(0);
+            }
 
             System.out.println("workers: " + workers.size());
             startWorker();
@@ -216,9 +224,9 @@ public class Coordinator {
             this.address = new Address(registration.getAddress());
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
+            System.out.println("id: " + id);
             var operations = dag.getOperationsForTaskManager(id);
 
-            System.out.println("id: " + id + " tasks: " + tasks + " operations: " + operations);
             /// WARNING: I don't want to touch this thing, I'm scared of it
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
