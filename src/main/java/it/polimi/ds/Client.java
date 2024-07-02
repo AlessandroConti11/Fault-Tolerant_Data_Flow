@@ -21,6 +21,7 @@ public class Client {
                         "change_key;add;70\n" +
                         "map;add;13\n" +
                         "filter;lower_or_equal;93\n" +
+                        "change_key;add;75\n" +
                         "filter;not_equal;11\n" +
                         "map;mult;77\n" +
                         "filter;not_equal;19\n" +

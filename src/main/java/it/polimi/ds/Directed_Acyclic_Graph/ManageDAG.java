@@ -459,6 +459,10 @@ public class ManageDAG {
             }
             task.add(i);
         }
+        if (tg.size() < getNumberOfGroups()) {
+            tg.put(gid, task);
+        }
+
         nextGroup.put(gid - 1, -1L);
 
         // set tasks to a group
@@ -466,6 +470,9 @@ public class ManageDAG {
 
         // set the next group to pass data to
         this.setFollowerGroup(nextGroup);
+
+        //sets the effective number of tasks used
+        this.setNumberOfTask(this.getNumberOfGroups() * this.maxTasksPerGroup);
     }
 
     /**
