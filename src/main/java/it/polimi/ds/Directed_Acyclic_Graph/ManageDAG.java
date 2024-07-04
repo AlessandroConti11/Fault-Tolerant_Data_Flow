@@ -438,7 +438,7 @@ public class ManageDAG {
 
     public Optional<Long> groupFromTask(long taskId) {
         for (Long group : tasksInGroup.keySet()) {
-            if (tasksInGroup.get(group).contains(taskId)) {
+            if (tasksInGroup.get(group).contains((Long) taskId)) {
                 return Optional.of(group);
             }
         }

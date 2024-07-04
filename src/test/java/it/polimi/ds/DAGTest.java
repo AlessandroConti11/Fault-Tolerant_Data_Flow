@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -133,14 +134,16 @@ public class DAGTest {
 
 	}
 
-	// @Test
-	// public void groups() throws Exception {
-	// String program = "change_key;add;1"
-	// + "\nchange_key;add;1";
-	//
-	// ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
-	// assertEquals(0, dag.getGroupsOfTaskManager(taskManagerId));
-	// }
+	@Test
+	public void groups() throws Exception {
+		String program = "change_key;add;1"
+				+ "\nchange_key;add;1";
+
+		ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+		assertEquals(0, dag.groupFromTask(0).get());
+		assertEquals(1, dag.groupFromTask(10).get());
+		assertEquals(Optional.empty(), dag.groupFromTask(20));
+	}
 
 	/// TODO: Stuff left to test:
 	/// - assignment of both tasks and TaskManagers into groups
