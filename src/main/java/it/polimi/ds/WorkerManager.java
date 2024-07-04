@@ -30,7 +30,6 @@ public class WorkerManager {
     public static final int DATA_PORT = 5002;
 
     private Vector<Task> tasks = new Vector<>(TASK_SLOTS);
-    private Vector<Thread> task_threads = new Vector<>(TASK_SLOTS);
     // Computation has a pair of group_id and the list of operations
     private List<Computation> computations;
 
@@ -107,41 +106,42 @@ public class WorkerManager {
 
             tasks.add(task);
 
-            task_threads.add(new Thread(() -> {
+            new Thread(() -> {
                 task.waitForData();
 
                 /// Now the task has all the data, we can execute it
                 var result = task.execute();
 
-                task.getSuccessorIds().parallelStream()
-                        .forEach(successor_id -> {
-                            var successor = network_nodes.get(successor_id);
-                            if (successor == null) {
-                                System.out.println("ERROR: Successor not found");
-                                return;
-                            }
+                var successors = task.getSuccessorIds();
+                if (successors.isEmpty()) {
+                    /// TODO: Send the result back to the coordinator, this is the last task
+                    System.out.println("TODO: Last task");
+                    return;
+                }
+                successors.parallelStream().forEach(successor_id -> {
+                    var successor = network_nodes.get(successor_id);
+                    if (successor == null) {
+                        System.out.println("ERROR: Successor not found");
+                        return;
+                    }
 
-                            try {
-                                Node conn = new Node(successor.withPort(DATA_PORT + (int) (long) successor_id));
-                                conn.send(DataRequest.newBuilder()
-                                        .setTaskId(task.getId())
-                                        .addAllData(result.stream()
-                                                .map(p -> Data.newBuilder()
-                                                        .setKey(p.getValue0())
-                                                        .setValue(p.getValue1())
-                                                        .build())
-                                                .toList())
-                                        .build());
-                                conn.close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
-            }));
-
-            for (Thread thread : task_threads) {
-                thread.start();
-            }
+                    try {
+                        Node conn = new Node(successor.withPort(DATA_PORT + (int) (long) successor_id));
+                        conn.send(DataRequest.newBuilder()
+                                .setTaskId(task.getId())
+                                .addAllData(result.stream()
+                                        .map(p -> Data.newBuilder()
+                                                .setKey(p.getValue0())
+                                                .setValue(p.getValue1())
+                                                .build())
+                                        .toList())
+                                .build());
+                        conn.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }).start();
         }
     }
 

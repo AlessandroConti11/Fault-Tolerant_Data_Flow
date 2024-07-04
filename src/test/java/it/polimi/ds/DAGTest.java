@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -121,6 +122,10 @@ public class DAGTest {
 					.count());
 		}
 
+		for (long i = 0; i < dag.getNumberOfTask(); i++) {
+			assertEquals(i / ManageDAG.maxTasksPerTaskManger, dag.getTaskIsInTaskManager().get(i));
+		}
+
 		program = "change_key;add;1"
 				+ "\nchange_key;add;1";
 
@@ -132,6 +137,9 @@ public class DAGTest {
 					.count());
 		}
 
+		for (long i = 0; i < dag.getNumberOfTask(); i++) {
+			assertEquals(i / ManageDAG.maxTasksPerTaskManger, dag.getTaskIsInTaskManager().get(i));
+		}
 	}
 
 	@Test
@@ -143,6 +151,31 @@ public class DAGTest {
 		assertEquals(0, dag.groupFromTask(0).get());
 		assertEquals(1, dag.groupFromTask(10).get());
 		assertEquals(Optional.empty(), dag.groupFromTask(20));
+
+		program = "filter;not_equal;55\n" +
+				"change_key;add;70\n" +
+				"map;add;13\n" +
+				"filter;lower_or_equal;93\n" +
+				"change_key;add;75\n" +
+				"filter;not_equal;11\n" +
+				"map;mult;77\n" +
+				"filter;not_equal;19\n" +
+				"change_key;add;75";
+
+		dag = new ManageDAG(ByteString.copyFromUtf8(program), 2);
+		assertEquals(0, dag.groupFromTask(0).get());
+		assertEquals(1, dag.groupFromTask(3).get());
+		assertEquals(2, dag.groupFromTask(6).get());
+		assertEquals(Optional.empty(), dag.groupFromTask(10));
+		assertEquals(0, dag.getGroupsOfTaskManager(0).get(0));
+		assertEquals(1, dag.getGroupsOfTaskManager(0).get(1));
+		assertEquals(1, dag.getGroupsOfTaskManager(1).get(0));
+		assertEquals(2, dag.getGroupsOfTaskManager(1).get(1));
+
+		assertEquals(true, dag.getManagersOfNextGroup(0).containsAll(List.of(0L, 1L)));
+		assertEquals(true, dag.getManagersOfNextGroup(1).containsAll(List.of(1L)));
+		/// 2 is the last group
+		assertEquals(0, dag.getManagersOfNextGroup(2).size());
 	}
 
 	/// TODO: Stuff left to test:

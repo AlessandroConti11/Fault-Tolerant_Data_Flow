@@ -97,7 +97,7 @@ public class ManageDAG {
 
         long taskManagerID = 0;
         taskIsInTaskManager.put(0L, taskManagerID);
-        for (long i = 1L; i < (long) maxTasksPerTaskManger * numberOftasksManagers; i++) {
+        for (long i = 1L; i < (long) getNumberOfTask(); i++) {
             taskIsInTaskManager.put(i, (i + 1) % maxTasksPerTaskManger == 0 ? taskManagerID++ : taskManagerID);
         }
 
@@ -456,6 +456,12 @@ public class ManageDAG {
     }
 
     public Set<Long> getManagersOfNextGroup(long group_id) {
+        if (!tasksInGroup.containsKey(group_id + 1)) {
+            /// This is the last group. So no task manager is needed.
+            assert group_id == tasksInGroup.size() - 1;
+
+            return new HashSet<>();
+        }
         var nextTasks = tasksInGroup.get(group_id + 1)
                 .stream()
                 .map(t -> taskIsInTaskManager.get(t))
@@ -499,10 +505,9 @@ public class ManageDAG {
             long taskManagerId) {
         List<Pair<List<Triplet<OperatorName, FunctionName, Integer>>, Long>> operations = new ArrayList<>();
 
-        // Get the tasks of the task manager
-        List<Long> tasks = getTasksOfTaskManager((int) taskManagerId);
         // Get the groups of the task
         List<Long> groups = getGroupsOfTaskManager(taskManagerId);
+        System.out.println("Groups: " + groups);
         // Get the operations of the group
         for (Long group : groups) {
             operations.add(new Pair<>(operationsGroup.get((int) (long) group), group));
@@ -521,12 +526,7 @@ public class ManageDAG {
         List<Long> result = new ArrayList<>();
 
         // Find all tasks in a task manager.
-        List<Long> matchingTid = new ArrayList<>();
-        for (Map.Entry<Long, Long> entry : taskIsInTaskManager.entrySet()) {
-            if (entry.getValue() == taskManagerId) {
-                matchingTid.add(entry.getKey());
-            }
-        }
+        List<Long> matchingTid = getTasksOfTaskManager(taskManagerId);
 
         // find all group that contains
         for (Map.Entry<Long, HashSet<Long>> entry : tasksInGroup.entrySet()) {

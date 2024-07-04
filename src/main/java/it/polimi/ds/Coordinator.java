@@ -96,8 +96,7 @@ public class Coordinator {
 
                 client.close();
                 System.exit(0);
-            }
-            catch (Exceptions.NotEnoughResourcesException e) {
+            } catch (Exceptions.NotEnoughResourcesException e) {
                 client.send(AllocationResponse.newBuilder()
                         .setCode(ReturnCode.INVALID_PROGRAM)
                         .build());
@@ -225,6 +224,9 @@ public class Coordinator {
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
             System.out.println("id: " + id);
+            System.out.println("tasks: " + dag.getTasksInGroup());
+            System.out.println("tasks: " + tasks);
+            System.out.println("operations: " + dag.getOperationsForTaskManager(id));
             var operations = dag.getOperationsForTaskManager(id);
 
             /// WARNING: I don't want to touch this thing, I'm scared of it
@@ -233,16 +235,15 @@ public class Coordinator {
                     .addAllTasks(tasks.stream()
                             .map(t -> ProtoTask.newBuilder()
                                     .setId(t)
-                                    .setGroupId(dag.groupFromTask((int) (long) t).get())
+                                    .setGroupId(dag.groupFromTask((long) t).get())
                                     .setIsCheckpoint(0) // TODO: Fix this
                                     .build())
                             .collect(Collectors.toList()))
-                    // .addAllManagerSuccessorIds(managersOfNextGroup.stream().collect(Collectors.toList()))
                     .addAllComputations(operations.stream()
                             .map(op -> Computation.newBuilder()
                                     .setGroupId(op.getValue1())
                                     .addAllManagerSuccessorIds(
-                                            dag.getManagersOfNextGroup((int) (long) op.getValue1()).stream()
+                                            dag.getManagersOfNextGroup((long) op.getValue1()).stream()
                                                     .collect(Collectors.toList()))
                                     .addAllOperations(op.getValue0().stream()
                                             .map(o -> Operation.newBuilder()
