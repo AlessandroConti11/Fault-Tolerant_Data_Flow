@@ -106,9 +106,43 @@ public class DAGTest {
 		assertEquals(8, ops.size());
 	}
 
+	@Test
+	public void numberOfTasks() throws Exception {
+		String program = "change_key;add;1"
+				+ "\nchange_key;add;1";
+
+		ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+
+		assertEquals(10, dag.getMaxTasksPerGroup());
+		assertEquals(20, dag.getNumberOfTask());
+		for (int i = 0; i < 3; i++) {
+			assertEquals(true, ManageDAG.maxTasksPerTaskManger >= dag.getTaskInTaskManager(i).stream()
+					.count());
+		}
+
+		program = "change_key;add;1"
+				+ "\nchange_key;add;1";
+
+		dag = new ManageDAG(ByteString.copyFromUtf8(program), 3);
+		assertEquals(7, dag.getMaxTasksPerGroup());
+		assertEquals(14, dag.getNumberOfTask());
+		for (int i = 0; i < 3; i++) {
+			assertEquals(true, ManageDAG.maxTasksPerTaskManger >= dag.getTaskInTaskManager(i).stream()
+					.count());
+		}
+
+	}
+
+	// @Test
+	// public void groups() throws Exception {
+	// String program = "change_key;add;1"
+	// + "\nchange_key;add;1";
+	//
+	// ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+	// assertEquals(0, dag.getGroupsOfTaskManager(taskManagerId));
+	// }
+
 	/// TODO: Stuff left to test:
-	/// - numberOfTasks parameter, seems strange how it's set
-	/// - do we need methods to add and remove TaskManagers?
 	/// - assignment of both tasks and TaskManagers into groups
 	/// - complicated getters, i.e. like getGroupsOfTaskManagers(tm_id)
 	/// - followers/successors

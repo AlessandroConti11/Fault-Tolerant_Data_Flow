@@ -27,7 +27,7 @@ public class ManageDAG {
      */
     private int numberOfTask;
 
-    private int maxTasksPerTaskManger = WorkerManager.TASK_SLOTS;
+    public static final int maxTasksPerTaskManger = WorkerManager.TASK_SLOTS;
     private int maxTasksPerGroup;
 
     /**
@@ -87,12 +87,13 @@ public class ManageDAG {
         // of operation group needed.
         this.generateOperationsGroup(ManageCSVfile.readCSVoperation(program));
 
-        this.setNumberOfTask(numberOftasksManagers * maxTasksPerTaskManger);
-
         this.maxTasksPerGroup = (getNumberOfTaskManager() * maxTasksPerTaskManger) / this.getNumberOfGroups();
         if (this.maxTasksPerGroup == 0) {
             throw new Exceptions.NotEnoughResourcesException();
         }
+
+        // sets the effective number of tasks used
+        this.setNumberOfTask(this.getNumberOfGroups() * this.maxTasksPerGroup);
 
         long taskManagerID = 0;
         taskIsInTaskManager.put(0L, taskManagerID);
@@ -153,6 +154,10 @@ public class ManageDAG {
      */
     public List<Pair<Integer, Integer>> getData() {
         return data;
+    }
+
+    public int getMaxTasksPerGroup() {
+        return maxTasksPerGroup;
     }
 
     /**
@@ -240,17 +245,6 @@ public class ManageDAG {
     }
 
     /**
-     * Setter --> sets the map between the TaskManagerID and the number of Task per
-     * TaskManager.
-     *
-     * @param taskPerTaskManager the map between the TaskManagerID and the number of
-     *                           Task per TaskManager.
-     */
-    public void setTaskPerTaskManager(HashMap<Long, Integer> taskPerTaskManager) {
-        this.taskPerTaskManager = taskPerTaskManager;
-    }
-
-    /**
      * Setter --> sets the list of operations to be calculated in a single operation
      * group.
      *
@@ -304,74 +298,6 @@ public class ManageDAG {
      */
     public void setFollowerGroup(HashMap<Long, Long> followerGroup) {
         this.followerGroup = followerGroup;
-    }
-
-    /**
-     * Adds a new Task Manager.
-     *
-     * @param taskManager the Task Manager to add.
-     */
-    public void addTaskManager(Pair<Long, Integer> taskManager) {
-        this.taskPerTaskManager.put(taskManager.getValue0(), taskManager.getValue1());
-        this.numberOfTask += taskManager.getValue1();
-        this.numberOfTaskManager++;
-    }
-
-    /**
-     * Removes a Task Manager.
-     *
-     * @param taskManager the Task Manager ID.
-     */
-    public void removeTaskManager(Long taskManager) {
-        this.numberOfTask -= this.taskPerTaskManager.get(taskManager);
-        this.taskPerTaskManager.remove(taskManager);
-        this.numberOfTaskManager--;
-    }
-
-    /**
-     * Adds a new Task in a specific Task Manager.
-     *
-     * @param taskManager the Task Manager ID.
-     * @param taskToAdd   the number of Tasks to add.
-     */
-    public void addTask(Long taskManager, Integer taskToAdd) {
-        this.taskPerTaskManager.replace(taskManager, this.taskPerTaskManager.get(taskManager) + taskToAdd);
-        this.numberOfTask += taskToAdd;
-    }
-
-    /**
-     * Adds a new Task in a specific Task Manager.
-     *
-     * @param taskManagerId the Task Manager ID.
-     * @param taskId        the Task ID.
-     */
-    public void addTask(Long taskManagerId, long taskId) {
-        this.taskPerTaskManager.replace(taskManagerId, this.taskPerTaskManager.get(taskManagerId) + 1);
-        this.numberOfTask++;
-        this.taskIsInTaskManager.put(taskId, taskManagerId);
-    }
-
-    /**
-     * Removes a Task in a specific Task Manager.
-     *
-     * @param taskManager  the Task Manager ID.
-     * @param taskToRemove the number of Tasks to remove.
-     */
-    public void removeTask(Long taskManager, Integer taskToRemove) {
-        this.taskPerTaskManager.replace(taskManager, this.taskPerTaskManager.get(taskManager) - taskToRemove);
-        this.numberOfTask -= taskToRemove;
-    }
-
-    /**
-     * Removes a Task in a specific Task Manager.
-     *
-     * @param taskManagerId the Task Manager ID.
-     * @param taskId        the Task ID.
-     */
-    public void removeTask(Long taskManagerId, long taskId) {
-        this.taskPerTaskManager.replace(taskManagerId, this.taskPerTaskManager.get(taskManagerId) - 1);
-        this.numberOfTask--;
-        this.taskIsInTaskManager.remove(taskId);
     }
 
     /**
@@ -471,8 +397,6 @@ public class ManageDAG {
         // set the next group to pass data to
         this.setFollowerGroup(nextGroup);
 
-        //sets the effective number of tasks used
-        this.setNumberOfTask(this.getNumberOfGroups() * this.maxTasksPerGroup);
     }
 
     /**
@@ -593,7 +517,7 @@ public class ManageDAG {
      * @param taskManagerId the task manager to find.
      * @return the groups where there are tasks that are managed by the task manager
      */
-    private List<Long> getGroupsOfTaskManager(long taskManagerId) {
+    public List<Long> getGroupsOfTaskManager(long taskManagerId) {
         List<Long> result = new ArrayList<>();
 
         // Find all tasks in a task manager.
