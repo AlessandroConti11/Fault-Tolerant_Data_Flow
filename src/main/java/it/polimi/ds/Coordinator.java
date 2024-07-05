@@ -115,7 +115,9 @@ public class Coordinator {
                     .collect(Collectors.toList());
 
             allocateResources(dag.getNumberOfTaskManager());
+            System.out.println("Allocated resources");
             waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+            System.out.println("Workers ready");
 
             /// Send back the OK to the client, this will signal that the network is ready
             client.send(AllocationResponse.newBuilder()
@@ -134,12 +136,14 @@ public class Coordinator {
                         dag.setData(ManageCSVfile.readCSVinput(data_req.getDataList()));
 
                         var new_req = DataRequest.newBuilder(data_req)
-                                .setSourceRole(Role.MANAGER)
-                                .build();
+                                .setSourceRole(Role.MANAGER);
 
                         dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
                             try {
-                                workers.get((long) t).send(new_req);
+                                workers.get(dag.getManagerOfTask((long) t).get())
+                                        .send(new_req
+                                                .setTaskId(t)
+                                                .build());
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
@@ -173,28 +177,9 @@ public class Coordinator {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
             while (true) {
                 Node node = new Node(workerListener.accept());
-                long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO:
-                                                                      // Handle
-                                                                      // this
-                                                                      // case,
-                                                                      // in
-                                                                      // theory
-                                                                      // it
-                                                                      // should
-                                                                      // never
-                                                                      // happen,
-                                                                      // but
-                                                                      // you
-                                                                      // never
-                                                                      // know.
-                                                                      // This
-                                                                      // happens
-                                                                      // when
-                                                                      // we
-                                                                      // initialize
-                                                                      // to
-                                                                      // many
-                                                                      // workerManagers
+                long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO: Handle this case, in theory it should
+                                                                      // never happen, but you never know. This happens
+                                                                      // when we initialize to many workerManagers
                                                                       // somehow
                 workers.put(id, new WorkerManagerHandler(node, id));
                 executors.submit(workers.get(id));
@@ -238,7 +223,7 @@ public class Coordinator {
         private Node data_connection;
 
         public static final int CHECKPOINT_TIMEOUT = 1000;
-        private volatile boolean network_changed = false;
+        private volatile boolean network_changed = true;
         private volatile boolean alive = false;
 
         private final boolean is_last = true;
@@ -254,10 +239,10 @@ public class Coordinator {
             this.address = new Address(registration.getAddress());
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
-            System.out.println("id: " + id);
-            System.out.println("tasks: " + dag.getTasksInGroup());
-            System.out.println("tasks: " + tasks);
-            System.out.println("operations: " + dag.getOperationsForTaskManager(id));
+            // System.out.println("id: " + id);
+            // System.out.println("tasks: " + dag.getTasksInGroup());
+            // System.out.println("tasks: " + tasks);
+            // System.out.println("operations: " + dag.getOperationsForTaskManager(id));
             var operations = dag.getOperationsForTaskManager(id);
 
             /// WARNING: I don't want to touch this thing, I'm scared of it
@@ -305,7 +290,7 @@ public class Coordinator {
         }
 
         public boolean isReady() {
-            return alive && network_changed;
+            return alive && !network_changed;
         }
 
         public void notifyNetworkChange() {
@@ -398,6 +383,11 @@ public class Coordinator {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+
+            ready = workers.entrySet().stream()
+                    .map(e -> e.getValue())
+                    .mapToInt(e -> e.isReady() ? 1 : 0)
+                    .sum();
         }
     }
 

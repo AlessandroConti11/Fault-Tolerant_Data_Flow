@@ -562,6 +562,14 @@ public class ManageDAG {
         }
     }
 
+    public Optional<Long> getManagerOfTask(long taskId) {
+        if (taskIsInTaskManager.containsKey(taskId)) {
+            return Optional.of(taskIsInTaskManager.get(taskId));
+        }
+
+        return Optional.empty();
+    }
+
     /*
      * insieme 1 --> insieme 2 -->
      * 
