@@ -17,6 +17,8 @@ import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
+import it.polimi.ds.proto.Role;
+
 import org.javatuples.Pair;
 
 public class RequestBuilder {
@@ -36,6 +38,7 @@ public class RequestBuilder {
             coordinator.send(ClientRequest.newBuilder()
                     .setDataRequest(DataRequest.newBuilder()
                             .setTaskId(-1)
+                            .setSourceRole(Role.CLIENT)
                             .addAllData(data.stream()
                                     .map(d -> Data.newBuilder()
                                             .setKey(d.getValue0())

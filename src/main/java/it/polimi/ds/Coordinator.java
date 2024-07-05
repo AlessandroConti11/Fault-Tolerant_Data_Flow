@@ -31,6 +31,7 @@ import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
 import it.polimi.ds.proto.ReturnCode;
+import it.polimi.ds.proto.Role;
 import it.polimi.ds.proto.SynchRequest;
 import it.polimi.ds.proto.SynchResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
@@ -106,6 +107,7 @@ public class Coordinator {
             }
 
             System.out.println("workers: " + workers.size());
+
             startWorker();
 
             /// Allocate the WokerManagers on the appropriate allocators
@@ -119,17 +121,25 @@ public class Coordinator {
             client.send(AllocationResponse.newBuilder()
                     .build());
 
+            System.out.println("Network ready");
+
             while (true) {
                 try {
                     var req = client.receive(ClientRequest.class);
                     if (req.hasDataRequest()) {
-                        System.out.println("Received data request " + req.getDataRequest().getDataList());
+                        System.out.println("Received data request ");
+                        var data_req = req.getDataRequest();
+                        assert data_req.getSourceRole() == Role.CLIENT;
 
-                        dag.setData(ManageCSVfile.readCSVinput(req.getDataRequest().getDataList()));
+                        dag.setData(ManageCSVfile.readCSVinput(data_req.getDataList()));
+
+                        var new_req = DataRequest.newBuilder(data_req)
+                                .setSourceRole(Role.MANAGER)
+                                .build();
 
                         dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
                             try {
-                                workers.get((long) t).send(req.getDataRequest());
+                                workers.get((long) t).send(new_req);
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
@@ -149,7 +159,9 @@ public class Coordinator {
 
             client.close();
 
-        } catch (Exception e) {
+        } catch (
+
+        Exception e) {
             e.printStackTrace();
         }
     });
@@ -161,9 +173,28 @@ public class Coordinator {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
             while (true) {
                 Node node = new Node(workerListener.accept());
-                long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO: Handle this case, in theory it should
-                                                                      // never happen, but you never know. This happens
-                                                                      // when we initialize to many workerManagers
+                long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO:
+                                                                      // Handle
+                                                                      // this
+                                                                      // case,
+                                                                      // in
+                                                                      // theory
+                                                                      // it
+                                                                      // should
+                                                                      // never
+                                                                      // happen,
+                                                                      // but
+                                                                      // you
+                                                                      // never
+                                                                      // know.
+                                                                      // This
+                                                                      // happens
+                                                                      // when
+                                                                      // we
+                                                                      // initialize
+                                                                      // to
+                                                                      // many
+                                                                      // workerManagers
                                                                       // somehow
                 workers.put(id, new WorkerManagerHandler(node, id));
                 executors.submit(workers.get(id));
@@ -334,6 +365,7 @@ public class Coordinator {
             }
             alive = false;
         }
+
     }
 
     void allocateResources(int requestedWorkers) throws IOException {

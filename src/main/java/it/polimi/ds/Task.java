@@ -6,6 +6,9 @@ import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.Computation;
 import it.polimi.ds.proto.Data;
+import it.polimi.ds.proto.DataRequest;
+import it.polimi.ds.proto.Role;
+
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
@@ -52,10 +55,15 @@ class Task {
         return has_all_data;
     }
 
-    // TODO: Change object to the correct type.
-    public void addData(List<Data> data) {
-        this.data.addAll(data);
-        data_count++;
+    // TODO: Reset counted for new computation.
+    public void addData(DataRequest req) {
+        this.data.addAll(req.getDataList());
+        if (req.getSourceRole() == Role.MANAGER) {
+            data_count = group_size;
+        } else {
+            data_count++;
+        }
+
         if (data_count == group_size) {
             has_all_data = true;
 

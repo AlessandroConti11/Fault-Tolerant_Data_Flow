@@ -10,6 +10,12 @@ enum ReturnCode {
   INVALID_PROGRAM = 1;
 }
 
+enum Role {
+  WORKER = 0;
+  MANAGER = 1;
+  CLIENT = 2;
+}
+
 message AllocationRequest {
   repeated ProtoAddress allocators = 1;
   int32 number_of_allocations = 2;
@@ -32,7 +38,8 @@ message WorkerManagerRequest {
 }
 message DataRequest {
   int64 task_id = 1;
-  repeated Data data = 2;
+  Role source_role = 2;
+  repeated Data data = 3;
 }
 message DataResponse { repeated Data data = 1; }
 

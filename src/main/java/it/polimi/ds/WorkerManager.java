@@ -17,6 +17,7 @@ import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
+import it.polimi.ds.proto.Role;
 import it.polimi.ds.proto.SynchRequest;
 import it.polimi.ds.proto.SynchResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
@@ -87,7 +88,8 @@ public class WorkerManager {
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
 
-        System.out.println(resp + "qui: " + id + " " + computations + " " + group_size);
+        // System.out.println(resp + "qui: " + id + " " + computations + " " +
+        // group_size);
         data_listener = new ServerSocket(WorkerManager.DATA_PORT + (int) this.id);
 
         System.out.println("DataConnection is listeninng on "
@@ -129,6 +131,7 @@ public class WorkerManager {
                         Node conn = new Node(successor.withPort(DATA_PORT + (int) (long) successor_id));
                         conn.send(DataRequest.newBuilder()
                                 .setTaskId(task.getId())
+                                .setSourceRole(Role.WORKER)
                                 .addAllData(result.stream()
                                         .map(p -> Data.newBuilder()
                                                 .setKey(p.getValue0())
@@ -177,19 +180,18 @@ public class WorkerManager {
     /// the case of the initialization, the coordinator. This expects to receive the
     /// DAG information to handle the tasks
     Thread data_communicator = new Thread(() -> {
-        System.out.println("eccomi");
         try {
             while (true) {
                 Node conn = new Node(data_listener.accept());
 
                 try {
                     var req = conn.receive(DataRequest.class);
-                    System.out.println("Received data request" + req.getDataList());
+                    System.out.println("Received data for task " + req.getTaskId() + " with data");
                     // TODO: Maybe put some queue to hold the data until it can receive the new data
                     // for the task
 
                     // TODO: Change types
-                    getTask(req.getTaskId()).addData(req.getDataList());
+                    getTask(req.getTaskId()).addData(req);
 
                     conn.close();
                 } catch (IOException e) {
