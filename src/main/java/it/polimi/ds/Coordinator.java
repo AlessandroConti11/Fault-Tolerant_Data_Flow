@@ -303,11 +303,17 @@ public class Coordinator {
 
             if (is_last) {
                 new Thread(() -> {
-                    try {
-                        response = data_connection.receive(DataResponse.class);
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                    var resp_aggregator = DataResponse.newBuilder();
+                    for (int i = 0; i < dag.getMaxTasksPerGroup(); i++) {
+                        try {
+                            var resp = data_connection.receive(DataResponse.class);
+                            resp_aggregator.addAllData(resp.getDataList());
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
                     }
+
+                    response = resp_aggregator.build();
                     System.out.println("Received response");
 
                     synchronized (response_lock) {

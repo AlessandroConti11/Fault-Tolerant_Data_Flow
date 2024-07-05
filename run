@@ -27,8 +27,8 @@ LAST_MOD_TIME=$(cat "$TIMESTAMP_FILE")
 
 # Compare the modification times
 if [ "$CURRENT_MOD_TIME" != "$LAST_MOD_TIME" ]; then
-	mvn compile
-	mvn package -DskipTests
+	mvn compile -T 1C
+	mvn package -DskipTests -T 1C
 fi
 
 # Update the timestamp file with the current time

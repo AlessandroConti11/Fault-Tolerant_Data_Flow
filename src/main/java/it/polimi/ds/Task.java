@@ -13,6 +13,7 @@ import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
 import java.util.List;
+import java.util.Vector;
 
 class Task {
     private final long id;
@@ -31,6 +32,7 @@ class Task {
         this.group_id = group_id;
         this.group_size = group_size;
         this.computation = computation;
+        this.data = new Vector<>();
     }
 
     /**

@@ -114,12 +114,24 @@ public class WorkerManager {
                 /// Now the task has all the data, we can execute it
                 var result = task.execute();
 
+                /// TODO: successors are not passed properly, idk why
                 var successors = task.getSuccessorIds();
                 if (successors.isEmpty()) {
-                    /// TODO: Send the result back to the coordinator, this is the last task
-                    System.out.println("TODO: Last task");
+                    try {
+                        coordinator.send(DataResponse.newBuilder()
+                                .addAllData(result.stream()
+                                        .map(p -> Data.newBuilder()
+                                                .setKey(p.getValue0())
+                                                .setValue(p.getValue1())
+                                                .build())
+                                        .toList())
+                                .build());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     return;
                 }
+
                 successors.parallelStream().forEach(successor_id -> {
                     var successor = network_nodes.get(successor_id);
                     if (successor == null) {
@@ -186,7 +198,7 @@ public class WorkerManager {
 
                 try {
                     var req = conn.receive(DataRequest.class);
-                    System.out.println("Received data for task " + req.getTaskId() + " with data");
+                    System.out.println("Received data for task " + req.getTaskId());
                     // TODO: Maybe put some queue to hold the data until it can receive the new data
                     // for the task
 
