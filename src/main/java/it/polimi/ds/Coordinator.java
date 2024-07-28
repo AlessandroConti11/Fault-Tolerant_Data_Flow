@@ -307,6 +307,7 @@ public class Coordinator {
                     .addAllComputations(operations.stream()
                             .map(op -> Computation.newBuilder()
                                     .setGroupId(op.getValue1())
+                                    /// TODO: Send the information about the task : taskmanager mapping
                                     .addAllManagerSuccessorIds(
                                             dag.getManagersOfNextGroup((long) op.getValue1()).stream()
                                                     .collect(Collectors.toList()))

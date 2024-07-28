@@ -18,14 +18,14 @@ public class Client {
         Request request = new RequestBuilder()
                 .setAllocations(2)
                 .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
-                        // "change_key;add;70\n" +
+                        "change_key;add;70\n" +
                         "map;add;13\n" +
                         "filter;lower_or_equal;93\n" +
-                        // "change_key;add;75\n" +
-                        // "filter;not_equal;11\n" +
-                        // "map;mult;77\n" +
-                        // "filter;not_equal;19\n" +
-                        // "change_key;add;75" +
+                        "change_key;add;75\n" +
+                        "filter;not_equal;11\n" +
+                        "map;mult;77\n" +
+                        "filter;not_equal;19\n" +
+                        "change_key;add;75" +
                     ""))
                 .addAllocators(Arrays.asList(args).stream()
                         .map(Address::fromStringIp)
@@ -39,8 +39,9 @@ public class Client {
         data.add(new Pair<>(2, 2));
 
         request.sendData(data);
-        // request.sendData(ByteString.copyFromUtf8("Hello World!"));
-        // request.sendData(ByteString.copyFromUtf8("Hello World!"));
+        // request.sendData(data);
+        // request.sendData(data);
+        // request.sendData(data);
 
         request.getResponses().forEach(System.out::println);
         request.close();

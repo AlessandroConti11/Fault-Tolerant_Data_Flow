@@ -59,6 +59,7 @@ public class WorkerManager {
      * @return the task that has the requested id.
      */
     Task getTask(long taskId) {
+        System.out.println("Ask for " + taskId + " have " + tasks.stream().map(t -> t.getId()).toList());
         for (Task task : tasks) {
             if (task.getId() == taskId) {
                 return task;
@@ -97,8 +98,6 @@ public class WorkerManager {
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
 
-        // System.out.println(resp + "qui: " + id + " " + computations + " " +
-        // group_size);
         data_listener = ServerSocketChannel.open();
         data_listener.bind(new InetSocketAddress(WorkerManager.DATA_PORT + (int) id));
         data_listener.configureBlocking(false);
@@ -131,6 +130,7 @@ public class WorkerManager {
                 var successors = task.getSuccessorIds();
                 /// Send back to the coordinator if there is nothing more to do
                 if (successors.isEmpty()) {
+                    System.out.println("Sending back results");
                     try {
                         coordinator.send(WorkerManagerRequest.newBuilder()
                                 .setResult(DataResponse.newBuilder()
@@ -156,6 +156,9 @@ public class WorkerManager {
                         return;
                     }
 
+                    System.out.println("Sending task to " + successor_id);
+
+                    // TODO: Divide the result to send to the next thing
                     try {
                         Node conn = new Node(successor);
                         conn.send(DataRequest.newBuilder()
@@ -220,7 +223,7 @@ public class WorkerManager {
     /// DAG information to handle the tasks
     Thread data_communicator = new Thread(() -> {
         try {
-			Selector sel = Selector.open();
+            Selector sel = Selector.open();
             data_listener.register(sel, SelectionKey.OP_ACCEPT);
 
             while (true) {
@@ -246,9 +249,9 @@ public class WorkerManager {
                     iter.remove();
                 }
             }
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     });
 
     public static void main(String[] args) throws IOException {

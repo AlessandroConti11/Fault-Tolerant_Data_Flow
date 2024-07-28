@@ -57,6 +57,12 @@ class Task {
         return has_all_data;
     }
 
+    public void reset() {
+        has_all_data = false;
+        data_count = 0;
+        data.clear();
+    }
+
     // TODO: Reset counted for new computation.
     public void addData(DataRequest req) {
         this.data.addAll(req.getDataList());
