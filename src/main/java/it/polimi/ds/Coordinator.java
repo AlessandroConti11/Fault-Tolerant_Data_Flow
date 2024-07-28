@@ -1,9 +1,11 @@
 package it.polimi.ds;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.channels.SocketChannel;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -25,6 +27,7 @@ import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.Computation;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
+import it.polimi.ds.proto.DataResponseOrBuilder;
 import it.polimi.ds.proto.NodeManagerInfo;
 import it.polimi.ds.proto.Operation;
 import it.polimi.ds.proto.ProtoTask;
@@ -36,6 +39,7 @@ import it.polimi.ds.proto.SynchRequest;
 import it.polimi.ds.proto.SynchResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
+import it.polimi.ds.proto.WorkerManagerRequest;
 
 public class Coordinator {
 
@@ -46,8 +50,7 @@ public class Coordinator {
     private ByteString program; // TODO: Change this into the actual type after parsing step
     private List<Address> allocators;
 
-    private Object response_lock = new Object();
-    private DataResponse response = null;
+    private ResultBuilder result_builder;
 
     private ManageDAG dag = null;
 
@@ -132,6 +135,7 @@ public class Coordinator {
                         System.out.println("Received data request ");
                         var data_req = req.getDataRequest();
                         assert data_req.getSourceRole() == Role.CLIENT;
+                        result_builder = new ResultBuilder(dag.getMaxTasksPerGroup());
 
                         dag.setData(ManageCSVfile.readCSVinput(data_req.getDataList()));
 
@@ -149,7 +153,7 @@ public class Coordinator {
                             }
                         });
 
-                        client.send(waitForDataResponse());
+                        client.send(result_builder.waitForResult());
                     } else if (req.hasCloseRequest()) {
                         System.out.println("Closing connection");
                         client.send(CloseResponse.newBuilder().build());
@@ -218,6 +222,39 @@ public class Coordinator {
         }
     });
 
+    class ResultBuilder {
+        private DataResponse.Builder resp_aggregator = DataResponse.newBuilder();
+        private volatile int response_count = 0;
+        private final int max_data_count;
+        private Object lock = new Object();
+
+        public ResultBuilder(int max_data_count) {
+            this.max_data_count = max_data_count;
+        }
+
+        public synchronized void addData(DataResponse r) {
+            resp_aggregator.addAllData(r.getDataList());
+            response_count += 1;
+            System.out.println("resp_count : "  + response_count + " max : " + max_data_count);
+            if (response_count >= max_data_count) {
+                synchronized (lock) {
+                    lock.notifyAll();
+                }
+            }
+        }
+
+        public DataResponse waitForResult() {
+            synchronized (lock) {
+                try {
+					lock.wait();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+            }
+            return resp_aggregator.build();
+        }
+    }
+
     class WorkerManagerHandler implements Runnable {
         private Node control_connection;
         private Node data_connection;
@@ -236,7 +273,7 @@ public class Coordinator {
             this.id = id;
 
             var registration = conn.receive(RegisterNodeManagerRequest.class);
-            this.address = new Address(registration.getAddress());
+            this.address = new Address(registration.getAddress()).withPort(WorkerManager.DATA_PORT + (int) (long) id);
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
             // System.out.println("id: " + id);
@@ -279,8 +316,10 @@ public class Coordinator {
             conn.send(SynchResponse.newBuilder().build());
 
             System.out.println("Data connection with " + id + " opened on "
-                    + address.withPort(WorkerManager.DATA_PORT + (int) id));
-            data_connection = new Node(address.withPort(WorkerManager.DATA_PORT + (int) id));
+                               + address);
+
+            // SocketChannel c = SocketChannel.open(new InetSocketAddress(address.getHost(), address.getPort()));
+            data_connection = new Node(address);
 
             alive = true;
         }
@@ -298,38 +337,26 @@ public class Coordinator {
         }
 
         public void send(DataRequest req) throws IOException {
-            System.out.println("Sending data request");
             data_connection.send(req);
-
-            if (is_last) {
-                new Thread(() -> {
-                    var resp_aggregator = DataResponse.newBuilder();
-                    for (int i = 0; i < dag.getMaxTasksPerGroup(); i++) {
-                        try {
-                            var resp = data_connection.receive(DataResponse.class);
-                            resp_aggregator.addAllData(resp.getDataList());
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    }
-
-                    response = resp_aggregator.build();
-                    System.out.println("Received response");
-
-                    synchronized (response_lock) {
-                        response_lock.notifyAll();
-                    }
-                }).start();
-            }
+            System.out.println("Sent data request for task " + req.getTaskId());
         }
 
         @Override
         public void run() {
             System.out.println("Worker manager connected");
+
             try {
                 while (true) {
                     try {
-                        var req = control_connection.receive(CheckpointRequest.class, CHECKPOINT_TIMEOUT);
+                        var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
+                        if (req.hasCheckpointRequest()) {
+                        } else if (req.hasResult()) {
+                            assert is_last;
+
+                            result_builder.addData(req.getResult());
+                        } else {
+                            assert false;
+                        }
                         // TODO: dag.putChecckpointData();
                         // Also, we need dag.getCheckpointData();
 
@@ -395,20 +422,6 @@ public class Coordinator {
                     .mapToInt(e -> e.isReady() ? 1 : 0)
                     .sum();
         }
-    }
-
-    DataResponse waitForDataResponse() {
-        System.out.println("Waiting for response");
-        synchronized (response_lock) {
-            try {
-                response_lock.wait();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        System.out.println("Received response 2");
-
-        return response;
     }
 
     public static void main(String[] args) throws SocketException {

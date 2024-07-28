@@ -1,7 +1,15 @@
 package it.polimi.ds;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ProtocolFamily;
 import java.net.ServerSocket;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Vector;
@@ -39,7 +47,7 @@ public class WorkerManager {
     private final long id;
     private final int group_size;
 
-    private ServerSocket data_listener = null;
+    private ServerSocketChannel data_listener = null;
 
     private ConcurrentMap<Long, Address> network_nodes = new ConcurrentHashMap<>();
 
@@ -90,10 +98,13 @@ public class WorkerManager {
 
         // System.out.println(resp + "qui: " + id + " " + computations + " " +
         // group_size);
-        data_listener = new ServerSocket(WorkerManager.DATA_PORT + (int) this.id);
+        data_listener = ServerSocketChannel.open();
+        data_listener.bind(new InetSocketAddress(WorkerManager.DATA_PORT + (int) id));
+        data_listener.configureBlocking(false);
 
         System.out.println("DataConnection is listeninng on "
                 + Address.getOwnAddress().withPort(WorkerManager.DATA_PORT + (int) id));
+
         data_communicator.start();
 
         coordinator.send(SynchRequest.newBuilder().build());
@@ -113,18 +124,22 @@ public class WorkerManager {
 
                 /// Now the task has all the data, we can execute it
                 var result = task.execute();
+                System.out.println("result :" + result);
 
                 /// TODO: successors are not passed properly, idk why
                 var successors = task.getSuccessorIds();
+                /// Send back to the coordinator if there is nothing more to do
                 if (successors.isEmpty()) {
                     try {
-                        coordinator.send(DataResponse.newBuilder()
-                                .addAllData(result.stream()
-                                        .map(p -> Data.newBuilder()
-                                                .setKey(p.getValue0())
-                                                .setValue(p.getValue1())
-                                                .build())
-                                        .toList())
+                        coordinator.send(WorkerManagerRequest.newBuilder()
+                                .setResult(DataResponse.newBuilder()
+                                        .addAllData(result.stream()
+                                                .map(p -> Data.newBuilder()
+                                                        .setKey(p.getValue0())
+                                                        .setValue(p.getValue1())
+                                                        .build())
+                                                .toList())
+                                        .build())
                                 .build());
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -132,6 +147,7 @@ public class WorkerManager {
                     return;
                 }
 
+                /// Otherwise send to the next in group
                 successors.parallelStream().forEach(successor_id -> {
                     var successor = network_nodes.get(successor_id);
                     if (successor == null) {
@@ -140,7 +156,7 @@ public class WorkerManager {
                     }
 
                     try {
-                        Node conn = new Node(successor.withPort(DATA_PORT + (int) (long) successor_id));
+                        Node conn = new Node(successor);
                         conn.send(DataRequest.newBuilder()
                                 .setTaskId(task.getId())
                                 .setSourceRole(Role.WORKER)
@@ -185,6 +201,8 @@ public class WorkerManager {
             } catch (IOException e) {
                 // UNREACHABLE, coordinator is reliable
             }
+
+            System.out.println("network " + network_nodes);
         }
     }
 
@@ -193,34 +211,35 @@ public class WorkerManager {
     /// DAG information to handle the tasks
     Thread data_communicator = new Thread(() -> {
         try {
+			Selector sel = Selector.open();
+            data_listener.register(sel, SelectionKey.OP_ACCEPT);
+
             while (true) {
-                Node conn = new Node(data_listener.accept());
+                sel.select();
 
-                try {
-                    var req = conn.receive(DataRequest.class);
-                    System.out.println("Received data for task " + req.getTaskId());
-                    // TODO: Maybe put some queue to hold the data until it can receive the new data
-                    // for the task
+                var iter = sel.selectedKeys().iterator();
+                while (iter.hasNext()) {
+                    SelectionKey key = iter.next();
 
-                    // TODO: Change types
-                    getTask(req.getTaskId()).addData(req);
+                    if (key.isAcceptable()) {
+                        SocketChannel conn = data_listener.accept();
+                        conn.configureBlocking(false);
+                        conn.register(sel, SelectionKey.OP_READ);
+                    }
 
-                    conn.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                    if (key.isReadable()) {
+                        Node conn = new Node(((SocketChannel) key.channel()).socket());
+                        DataRequest req = conn.nonBlockReceive(DataRequest.class);
+
+                        getTask(req.getTaskId()).addData(req);
+                    }
+
+                    iter.remove();
                 }
-
             }
-        } catch (IOException e) {
-            try {
-                if (data_listener != null)
-                    data_listener.close();
-            } catch (Exception ee) {
-            }
-
-            // TODO: Close everything I guess?
-            e.printStackTrace();
-        }
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
     });
 
     public static void main(String[] args) throws IOException {

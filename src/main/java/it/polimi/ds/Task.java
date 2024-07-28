@@ -87,7 +87,7 @@ class Task {
     public List<Pair<Integer, Integer>> execute() {
         // Data to compute.
         List<Pair<Integer, Integer>> dataToCompute = ManageCSVfile.readCSVinput(data);
-        // Operation to be performed on data.
+        // Operation to be performed on data.groue
         List<Triplet<OperatorName, FunctionName, Integer>> operationToCompute = ManageCSVfile
                 .readCSVoperation(computation);
 
