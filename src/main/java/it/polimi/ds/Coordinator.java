@@ -23,8 +23,11 @@ import it.polimi.ds.proto.AllocationRequest;
 import it.polimi.ds.proto.AllocationResponse;
 import it.polimi.ds.proto.CheckpointRequest;
 import it.polimi.ds.proto.ClientRequest;
+import it.polimi.ds.proto.CloseRequest;
 import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.ControlWorkerRequest;
+import it.polimi.ds.proto.ControlWorkerRequestOrBuilder;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.DataResponseOrBuilder;
@@ -157,6 +160,14 @@ public class Coordinator {
                         client.send(result_builder.waitForResult());
                     } else if (req.hasCloseRequest()) {
                         System.out.println("Closing connection");
+                        workers.values().parallelStream().forEach(w -> {
+                            try {
+                                w.close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
+
                         client.send(CloseResponse.newBuilder().build());
                         System.exit(0);
                     }
@@ -343,6 +354,15 @@ public class Coordinator {
             System.out.println("Sent data request for task " + req.getTaskId());
         }
 
+        public void close() throws IOException {
+            control_connection.send(ControlWorkerRequest
+                    .newBuilder()
+                    .setCloseRequest(CloseRequest
+                            .newBuilder()
+                            .build())
+                    .build());
+        }
+
         @Override
         public void run() {
             System.out.println("Worker manager connected");
@@ -365,12 +385,16 @@ public class Coordinator {
 
                     } catch (SocketTimeoutException e) {
                         if (network_changed) {
-                            control_connection.send(UpdateNetworkRequest.newBuilder()
-                                    .addAllTaskManagerIds(workers.keySet())
-                                    .addAllAddresses(workers.values().stream()
-                                            .map(w -> w.address.toProto())
-                                            .collect(Collectors.toList()))
-                                    .build());
+                            control_connection.send(
+                                    ControlWorkerRequest
+                                            .newBuilder()
+                                            .setUpdateNetworkRequest(UpdateNetworkRequest.newBuilder()
+                                                    .addAllTaskManagerIds(workers.keySet())
+                                                    .addAllAddresses(workers.values().stream()
+                                                            .map(w -> w.address.toProto())
+                                                            .collect(Collectors.toList()))
+                                                    .build())
+                                            .build());
 
                             var ok = control_connection.receive(UpdateNetworkResponse.class);
                             network_changed = false;

@@ -90,6 +90,13 @@ message Operation {
   int32 input = 3;
 }
 
+message ControlWorkerRequest {
+   oneof request {
+      UpdateNetworkRequest update_network_request = 1;
+      CloseRequest close_request = 2;
+   }
+}
+
 message UpdateNetworkRequest {
   repeated ProtoAddress addresses = 1;
   repeated int64 task_manager_ids = 2;

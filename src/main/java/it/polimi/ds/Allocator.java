@@ -89,6 +89,7 @@ public class Allocator {
             } catch (IOException e) {
                 System.out.println(prefix + "Error reading output, closing pipe");
             }
+            System.out.println(RED + "****EXIT**** " + RESET + prefix);
         }).start();
     }
 

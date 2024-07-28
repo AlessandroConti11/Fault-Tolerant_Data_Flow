@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentMap;
 import com.google.protobuf.ByteString;
 
 import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.ControlWorkerRequest;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
@@ -180,13 +181,21 @@ public class WorkerManager {
     /// changes in the network
     public void start() {
         while (true) {
-            UpdateNetworkRequest network_change;
+            ControlWorkerRequest req;
             try {
-                network_change = coordinator.receive(UpdateNetworkRequest.class);
+                req = coordinator.receive(ControlWorkerRequest.class);
             } catch (IOException e) {
                 e.printStackTrace();
                 break;
             }
+
+            if (req.hasCloseRequest()) {
+                System.out.println("Bye bye");
+                System.exit(0);
+            }
+
+            assert req.hasUpdateNetworkRequest();
+            var network_change = req.getUpdateNetworkRequest();
 
             var nodes = network_change.getAddressesList();
             var ids = network_change.getTaskManagerIdsList();
