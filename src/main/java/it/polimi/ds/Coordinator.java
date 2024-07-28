@@ -139,13 +139,14 @@ public class Coordinator {
 
                         dag.setData(ManageCSVfile.readCSVinput(data_req.getDataList()));
 
-                        var new_req = DataRequest.newBuilder(data_req)
-                                .setSourceRole(Role.MANAGER);
+                        var data = dag.getDataRequestsForGroup(0);
+                        System.out.println(data);
 
                         dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
                             try {
                                 workers.get(dag.getManagerOfTask((long) t).get())
-                                        .send(new_req
+                                        .send(data.get((int) (long) t)
+                                                .setSourceRole(Role.MANAGER)
                                                 .setTaskId(t)
                                                 .build());
                             } catch (IOException e) {
@@ -235,7 +236,7 @@ public class Coordinator {
         public synchronized void addData(DataResponse r) {
             resp_aggregator.addAllData(r.getDataList());
             response_count += 1;
-            System.out.println("resp_count : "  + response_count + " max : " + max_data_count);
+            System.out.println("resp_count : " + response_count + " max : " + max_data_count);
             if (response_count >= max_data_count) {
                 synchronized (lock) {
                     lock.notifyAll();
@@ -246,10 +247,10 @@ public class Coordinator {
         public DataResponse waitForResult() {
             synchronized (lock) {
                 try {
-					lock.wait();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
+                    lock.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
             return resp_aggregator.build();
         }
@@ -316,9 +317,10 @@ public class Coordinator {
             conn.send(SynchResponse.newBuilder().build());
 
             System.out.println("Data connection with " + id + " opened on "
-                               + address);
+                    + address);
 
-            // SocketChannel c = SocketChannel.open(new InetSocketAddress(address.getHost(), address.getPort()));
+            // SocketChannel c = SocketChannel.open(new InetSocketAddress(address.getHost(),
+            // address.getPort()));
             data_connection = new Node(address);
 
             alive = true;
@@ -350,6 +352,7 @@ public class Coordinator {
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
+                            // assert is_checkpoint;
                         } else if (req.hasResult()) {
                             assert is_last;
 

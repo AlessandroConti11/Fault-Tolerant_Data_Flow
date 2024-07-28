@@ -7,6 +7,8 @@ import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.CheckpointRequest;
+import it.polimi.ds.proto.Data;
+import it.polimi.ds.proto.DataRequest;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
@@ -147,13 +149,19 @@ public class ManageDAG {
         return operationsGroup;
     }
 
-    /**
-     * Getter --> gets the list of all data to compute.
-     *
-     * @return the list of all data to compute.
-     */
-    public List<Pair<Integer, Integer>> getData() {
-        return data;
+    public List<DataRequest.Builder> getDataRequestsForGroup(long group_id) {
+        List<DataRequest.Builder> ret = new ArrayList<>(maxTasksPerGroup);
+        for (int i = 0; i < maxTasksPerGroup; i++) {
+            ret.add(DataRequest.newBuilder());
+        }
+        for (var d : data) {
+            var task_data = ret.get(d.getValue0() % maxTasksPerGroup);
+            task_data.addData(Data.newBuilder()
+                .setKey(d.getValue0())
+                .setValue(d.getValue1()));
+        }
+
+        return ret; 
     }
 
     public int getMaxTasksPerGroup() {
