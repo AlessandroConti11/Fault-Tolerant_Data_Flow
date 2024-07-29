@@ -12,8 +12,13 @@ import it.polimi.ds.proto.Role;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Vector;
+import java.util.Map.Entry;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 class Task {
     private final long id;
@@ -26,7 +31,12 @@ class Task {
     private int data_count = 0;
     private List<Data> data;
 
+    private List<Pair<Integer, Integer>>  result;
+
     public Task(long id, long group_id, Computation computation, boolean is_checkpoint, int group_size) {
+        assert group_size > 0;
+        assert id >= 0;
+        
         this.id = id;
         this.is_checkpoint = is_checkpoint;
         this.group_id = group_id;
@@ -81,23 +91,44 @@ class Task {
         }
     }
 
-    public List<Long> getSuccessorIds() {
-        return computation.getManagerSuccessorIdsList();
+    public Map<Long, List<Long>> getSuccessorMap() {
+        return computation
+                .getManagersMappingList().stream()
+                /// No duplicate by design so it's fine
+                .collect(Collectors.toMap(id -> id.getManagerSuccessorId(), id -> id.getTaskIdList(), (v1, v2) -> v1));
     }
+
+    public List<DataRequest.Builder> getSuccessorsDataRequests() {
+        List<DataRequest.Builder> ret = new ArrayList<>(group_size);
+        for (int i = 0; i < group_size; i++) {
+            ret.add(DataRequest.newBuilder());
+        }
+
+        System.out.println(group_size);
+        for (var d : result) {
+            var task_data = ret.get(d.getValue0() % group_size);
+            task_data.addData(Data.newBuilder()
+                .setKey(d.getValue0())
+                .setValue(d.getValue1()));
+        }
+
+        return ret; 
+    }
+
 
     /**
      * Perform the operation.
      *
      * @return the new data, after the operations have been performed.
      */
-    public List<Pair<Integer, Integer>> execute() {
+    public void execute() {
         // Data to compute.
         List<Pair<Integer, Integer>> dataToCompute = ManageCSVfile.readCSVinput(data);
         // Operation to be performed on data.groue
         List<Triplet<OperatorName, FunctionName, Integer>> operationToCompute = ManageCSVfile
                 .readCSVoperation(computation);
 
-        return new Operator().operations(operationToCompute, dataToCompute);
+        result = new Operator().operations(operationToCompute, dataToCompute);
     }
 
     public void waitForData() {
@@ -108,5 +139,13 @@ class Task {
                 e.printStackTrace();
             }
         }
+    }
+
+	public List<Pair<Integer, Integer>> getResult() {
+		return result;
+	}
+
+    public int getGroupSize() {
+        return group_size;
     }
 }

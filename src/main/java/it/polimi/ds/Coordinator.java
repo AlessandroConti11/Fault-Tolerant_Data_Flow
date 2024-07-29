@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
@@ -31,6 +32,7 @@ import it.polimi.ds.proto.ControlWorkerRequestOrBuilder;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.DataResponseOrBuilder;
+import it.polimi.ds.proto.ManagerTaskMap;
 import it.polimi.ds.proto.NodeManagerInfo;
 import it.polimi.ds.proto.Operation;
 import it.polimi.ds.proto.ProtoTask;
@@ -288,13 +290,10 @@ public class Coordinator {
             this.address = new Address(registration.getAddress()).withPort(WorkerManager.DATA_PORT + (int) (long) id);
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
-            // System.out.println("id: " + id);
-            // System.out.println("tasks: " + dag.getTasksInGroup());
-            // System.out.println("tasks: " + tasks);
-            // System.out.println("operations: " + dag.getOperationsForTaskManager(id));
             var operations = dag.getOperationsForTaskManager(id);
 
             /// WARNING: I don't want to touch this thing, I'm scared of it
+            System.out.println("max task" + dag.getMaxTasksPerGroup());
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
                     .addAllTasks(tasks.stream()
@@ -304,12 +303,16 @@ public class Coordinator {
                                     .setIsCheckpoint(0) // TODO: Fix this
                                     .build())
                             .collect(Collectors.toList()))
+                    .setGroupSize(dag.getMaxTasksPerGroup())
                     .addAllComputations(operations.stream()
                             .map(op -> Computation.newBuilder()
                                     .setGroupId(op.getValue1())
-                                    /// TODO: Send the information about the task : taskmanager mapping
-                                    .addAllManagerSuccessorIds(
+                                    .addAllManagersMapping(
                                             dag.getManagersOfNextGroup((long) op.getValue1()).stream()
+                                                    .map(m_id -> ManagerTaskMap.newBuilder()
+                                                            .setManagerSuccessorId(m_id)
+                                                            .addAllTaskId(dag.getTaskInTaskManager(m_id))
+                                                            .build())
                                                     .collect(Collectors.toList()))
                                     .addAllOperations(op.getValue0().stream()
                                             .map(o -> Operation.newBuilder()

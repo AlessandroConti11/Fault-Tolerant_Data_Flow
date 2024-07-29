@@ -6,6 +6,7 @@ import java.net.ProtocolFamily;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -97,6 +98,7 @@ public class WorkerManager {
         id = resp.getId();
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
+        System.out.println("grp size" + group_size);
 
         data_listener = ServerSocketChannel.open();
         data_listener.bind(new InetSocketAddress(WorkerManager.DATA_PORT + (int) id));
@@ -123,18 +125,17 @@ public class WorkerManager {
                 task.waitForData();
 
                 /// Now the task has all the data, we can execute it
-                var result = task.execute();
-                System.out.println("result :" + result);
+                task.execute();
 
-                /// TODO: successors are not passed properly, idk why
-                var successors = task.getSuccessorIds();
+                /// TODO: successors are not passed properly, idk why. <- Maybe outdated
+                var successors = task.getSuccessorMap();
                 /// Send back to the coordinator if there is nothing more to do
                 if (successors.isEmpty()) {
                     System.out.println("Sending back results");
                     try {
                         coordinator.send(WorkerManagerRequest.newBuilder()
                                 .setResult(DataResponse.newBuilder()
-                                        .addAllData(result.stream()
+                                        .addAllData(task.getResult().stream()
                                                 .map(p -> Data.newBuilder()
                                                         .setKey(p.getValue0())
                                                         .setValue(p.getValue1())
@@ -149,7 +150,8 @@ public class WorkerManager {
                 }
 
                 /// Otherwise send to the next in group
-                successors.parallelStream().forEach(successor_id -> {
+                List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
+                successors.keySet().parallelStream().forEach(successor_id -> {
                     var successor = network_nodes.get(successor_id);
                     if (successor == null) {
                         System.out.println("ERROR: Successor not found");
@@ -158,19 +160,19 @@ public class WorkerManager {
 
                     System.out.println("Sending task to " + successor_id);
 
-                    // TODO: Divide the result to send to the next thing
                     try {
                         Node conn = new Node(successor);
-                        conn.send(DataRequest.newBuilder()
-                                .setTaskId(task.getId())
-                                .setSourceRole(Role.WORKER)
-                                .addAllData(result.stream()
-                                        .map(p -> Data.newBuilder()
-                                                .setKey(p.getValue0())
-                                                .setValue(p.getValue1())
-                                                .build())
-                                        .toList())
-                                .build());
+                        // TODO: Divide the result to send to the next thing
+                        successors.get(successor_id).stream().forEach(task_id -> {
+                            var req = requests.get((int) (task_id % task.getGroupSize()))
+                                    .setSourceRole(Role.WORKER)
+                                    .setTaskId(task_id).build();
+                            try {
+                                conn.send(req);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
                         conn.close();
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -241,9 +243,14 @@ public class WorkerManager {
 
                     if (key.isReadable()) {
                         Node conn = new Node(((SocketChannel) key.channel()).socket());
-                        DataRequest req = conn.nonBlockReceive(DataRequest.class);
+                        try {
+                            DataRequest req = conn.nonBlockReceive(DataRequest.class);
+                            assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER;
 
-                        getTask(req.getTaskId()).addData(req);
+                            getTask(req.getTaskId()).addData(req);
+                        } catch (ClosedChannelException e) {
+                            conn.close();
+                        }
                     }
 
                     iter.remove();

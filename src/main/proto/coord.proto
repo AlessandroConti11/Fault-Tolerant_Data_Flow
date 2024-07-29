@@ -76,8 +76,13 @@ message ProtoTask {
 
 message Computation {
   int64 group_id = 1;
-  repeated int64 manager_successor_ids = 2;
+  repeated ManagerTaskMap managers_mapping = 2;
   repeated Operation operations = 3;
+}
+
+message ManagerTaskMap {
+  int64 manager_successor_id = 1;
+  repeated int64 task_id = 2;
 }
 
 message Data {
