@@ -33,7 +33,7 @@ public class Allocator {
                         System.out.println("Coordinator");
 
                         Process proc = process_builder
-                                .command("java", "-jar", "target/coordinator.jar")
+                                .command("java", "-ea", "-jar", "target/coordinator.jar")
                                 .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                 .start();
 
@@ -53,7 +53,7 @@ public class Allocator {
                         NodeManagerInfo info = req.getNodeManagerInfo();
                         for (int i = 0; i < info.getNumContainers(); i++) {
                             Process proc = process_builder
-                                    .command("java", "-jar", "target/workers.jar",
+                                    .command("java", "-ea", "-jar", "target/workers.jar",
                                             new Address(info.getAddress()).toString())
                                     .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                     .start();

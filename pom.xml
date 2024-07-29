@@ -75,6 +75,13 @@
               </goals>
               <configuration>
                 <mainClass>it.polimi.ds.Allocator</mainClass>
+          <systemProperties>
+            <!-- Enable assertions -->
+            <property>
+              <key>java.vm.options</key>
+              <value>-ea</value>
+            </property>
+          </systemProperties>
               </configuration>
             </execution>
 
@@ -85,6 +92,13 @@
               </goals>
               <configuration>
                 <mainClass>it.polimi.ds.Client</mainClass>
+          <systemProperties>
+            <!-- Enable assertions -->
+            <property>
+              <key>java.vm.options</key>
+              <value>-ea</value>
+            </property>
+          </systemProperties>
               </configuration>
             </execution>
 
@@ -95,6 +109,13 @@
               </goals>
               <configuration>
                 <mainClass>it.polimi.ds.WorkerManager</mainClass>
+          <systemProperties>
+            <!-- Enable assertions -->
+            <property>
+              <key>java.vm.options</key>
+              <value>-ea</value>
+            </property>
+          </systemProperties>
               </configuration>
             </execution>
 
@@ -105,6 +126,13 @@
               </goals>
               <configuration>
                 <mainClass>it.polimi.ds.Coordinator</mainClass>
+          <systemProperties>
+            <!-- Enable assertions -->
+            <property>
+              <key>java.vm.options</key>
+              <value>-ea</value>
+            </property>
+          </systemProperties>
               </configuration>
             </execution>
 
