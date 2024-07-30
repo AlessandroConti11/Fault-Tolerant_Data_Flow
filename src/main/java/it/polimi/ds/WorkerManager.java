@@ -53,6 +53,8 @@ public class WorkerManager {
 
     private ConcurrentMap<Long, Address> network_nodes = new ConcurrentHashMap<>();
 
+    // private Object flush_lock = new Object();
+
     /**
      * Gets the task.
      *
@@ -109,9 +111,6 @@ public class WorkerManager {
 
         data_communicator.start();
 
-        coordinator.send(SynchRequest.newBuilder().build());
-        coordinator.receive(SynchResponse.class);
-
         for (ProtoTask t : resp.getTasksList()) {
             Task task = new Task(t.getId(),
                     t.getGroupId(),
@@ -122,65 +121,103 @@ public class WorkerManager {
             tasks.add(task);
 
             new Thread(() -> {
-                task.waitForData();
+                while (true) {
+                    processTask(task);
 
-                /// Now the task has all the data, we can execute it
-                task.execute();
-
-                /// TODO: successors are not passed properly, idk why. <- Maybe outdated
-                var successors = task.getSuccessorMap();
-                /// Send back to the coordinator if there is nothing more to do
-                if (successors.isEmpty()) {
-                    System.out.println("Sending back results");
-                    try {
-                        coordinator.send(WorkerManagerRequest.newBuilder()
-                                .setResult(DataResponse.newBuilder()
-                                        .addAllData(task.getResult().stream()
-                                                .map(p -> Data.newBuilder()
-                                                        .setKey(p.getValue0())
-                                                        .setValue(p.getValue1())
-                                                        .build())
-                                                .toList())
-                                        .build())
-                                .build());
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    return;
+                    task.reset();
                 }
+            }).start();
+        }
 
-                /// Otherwise send to the next in group
-                List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
-                successors.keySet().parallelStream().forEach(successor_id -> {
-                    var successor = network_nodes.get(successor_id);
-                    if (successor == null) {
-                        System.out.println("ERROR: Successor not found");
-                        return;
-                    }
+        coordinator.send(SynchRequest.newBuilder().build());
+        coordinator.receive(SynchResponse.class);
+    }
 
-                    System.out.println("Sending task to " + successor_id);
+    public void processTask(Task task) {
+        task.waitForData();
 
+        /// Now the task has all the data, we can execute it
+        task.execute();
+
+        /// TODO: successors are not passed properly, idk why. <- Maybe outdated
+        var successors = task.getSuccessorMap();
+        /// Send back to the coordinator if there is nothing more to do
+        if (successors.isEmpty()) {
+            writeBackResult(coordinator, task);
+            return;
+        }
+
+        /// Otherwise send to the next in group
+        List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
+
+        /// Assert that we have only one group as a successors
+        assert successors.entrySet().stream().map(e -> e.getValue().size()).reduce(0, (sum, val) -> sum + val) == group_size;
+
+        successors.keySet().parallelStream().forEach(successor_id -> {
+            var successor = network_nodes.get(successor_id);
+            if (successor == null) {
+                System.out.println("ERROR: Successor not found");
+                return;
+            }
+
+            System.out.println("Sending task to " + successor_id);
+
+            try {
+                Node conn = new Node(successor);
+                // TODO: Divide the result to send to the next thing
+                System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
+
+                successors.get(successor_id).stream().forEach(next_task_id -> {
+                    assert task.getId() < next_task_id;
+
+                    var req = requests.get((int) (next_task_id % task.getGroupSize()))
+                            .setSourceRole(Role.WORKER)
+                            .setTaskId(next_task_id).build();
                     try {
-                        Node conn = new Node(successor);
-                        // TODO: Divide the result to send to the next thing
-                        successors.get(successor_id).stream().forEach(task_id -> {
-                            var req = requests.get((int) (task_id % task.getGroupSize()))
-                                    .setSourceRole(Role.WORKER)
-                                    .setTaskId(task_id).build();
-                            try {
-                                conn.send(req);
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
-                        conn.close();
+                        conn.send(req);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 });
-            }).start();
-        }
+                conn.close();
+
+                if (task.isCheckpoint()) {
+                    /// TODO: also send to the coordinator the checkpoint
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
+
+    public void writeBackResult(Node node, Task task) {
+        System.out.println("Sending back results");
+        try {
+            node.send(WorkerManagerRequest.newBuilder()
+                    .setResult(DataResponse.newBuilder()
+                            .addAllData(task.getResult().stream()
+                                    .map(p -> Data.newBuilder()
+                                            .setKey(p.getValue0())
+                                            .setValue(p.getValue1())
+                                            .build())
+                                    .toList())
+                            .build())
+                    .build());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    // public void waitForFlush() {
+    //     synchronized (flush_lock) {
+    //         try {
+    //             flush_lock.wait();
+    //         } catch (InterruptedException e) {
+    //             e.printStackTrace();
+    //         }
+    //     }
+    // }
 
     /// Main thread handles the connection with the coordinator that listens for
     /// changes in the network
@@ -198,6 +235,12 @@ public class WorkerManager {
                 System.out.println("Bye bye");
                 System.exit(0);
             }
+
+            // if (req.hasFlushRequest()) {
+            //     synchronized (flush_lock) {
+            //         flush_lock.notifyAll();
+            //     }
+            // }
 
             assert req.hasUpdateNetworkRequest();
             var network_change = req.getUpdateNetworkRequest();

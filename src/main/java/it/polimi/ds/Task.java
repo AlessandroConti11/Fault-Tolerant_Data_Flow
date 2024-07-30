@@ -68,6 +68,7 @@ class Task {
     }
 
     public void reset() {
+        System.out.println("RESET");
         has_all_data = false;
         data_count = 0;
         data.clear();
@@ -75,6 +76,9 @@ class Task {
 
     // TODO: Reset counted for new computation.
     public void addData(DataRequest req) {
+        assert has_all_data == false;
+        assert data_count < group_size;
+
         this.data.addAll(req.getDataList());
         if (req.getSourceRole() == Role.MANAGER) {
             data_count = group_size;
@@ -104,7 +108,6 @@ class Task {
             ret.add(DataRequest.newBuilder());
         }
 
-        System.out.println(group_size);
         for (var d : result) {
             var task_data = ret.get(d.getValue0() % group_size);
             task_data.addData(Data.newBuilder()
@@ -147,5 +150,9 @@ class Task {
 
     public int getGroupSize() {
         return group_size;
+    }
+
+    public boolean isCheckpoint() {
+        return is_checkpoint;
     }
 }

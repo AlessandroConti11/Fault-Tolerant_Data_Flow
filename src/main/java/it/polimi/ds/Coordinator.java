@@ -1,17 +1,14 @@
 package it.polimi.ds;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.nio.channels.SocketChannel;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
@@ -22,16 +19,13 @@ import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.AllocationRequest;
 import it.polimi.ds.proto.AllocationResponse;
-import it.polimi.ds.proto.CheckpointRequest;
 import it.polimi.ds.proto.ClientRequest;
 import it.polimi.ds.proto.CloseRequest;
 import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.Computation;
 import it.polimi.ds.proto.ControlWorkerRequest;
-import it.polimi.ds.proto.ControlWorkerRequestOrBuilder;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
-import it.polimi.ds.proto.DataResponseOrBuilder;
 import it.polimi.ds.proto.ManagerTaskMap;
 import it.polimi.ds.proto.NodeManagerInfo;
 import it.polimi.ds.proto.Operation;
@@ -311,7 +305,11 @@ public class Coordinator {
                                             dag.getManagersOfNextGroup((long) op.getValue1()).stream()
                                                     .map(m_id -> ManagerTaskMap.newBuilder()
                                                             .setManagerSuccessorId(m_id)
-                                                            .addAllTaskId(dag.getTaskInTaskManager(m_id))
+                                                            .addAllTaskId(dag.getTaskInTaskManager(m_id).stream()
+                                                                    .filter(t_id -> dag
+                                                                            .getTasksOfGroup((long) op.getValue1() + 1)
+                                                                            .contains(t_id))
+                                                                    .toList())
                                                             .build())
                                                     .collect(Collectors.toList()))
                                     .addAllOperations(op.getValue0().stream()

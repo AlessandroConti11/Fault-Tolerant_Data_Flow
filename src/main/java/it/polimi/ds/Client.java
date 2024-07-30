@@ -39,7 +39,7 @@ public class Client {
         data.add(new Pair<>(2, 2));
 
         request.sendData(data);
-        // request.sendData(data);
+        request.sendData(data);
         // request.sendData(data);
         // request.sendData(data);
 
