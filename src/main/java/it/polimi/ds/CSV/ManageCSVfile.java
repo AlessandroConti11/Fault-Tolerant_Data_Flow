@@ -7,6 +7,7 @@ import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.Computation;
 import it.polimi.ds.proto.Data;
+import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.Operation;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
@@ -17,7 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
+import java.util.Vector;
 
 /**
  * The ManageCSVfile class provides methods for reading input tuples and
@@ -218,6 +219,49 @@ public class ManageCSVfile {
         }
 
         return result;
+    }
+
+
+    /**
+     * Writes the result tuple computed.
+     *
+     * @param result the result computed.
+     * @param fileName the file name where to save the data.
+     */
+    public static void writeCSVresult(Vector<DataResponse> result, String fileName) {
+        //The data computed.
+        String data = "";
+        List<Data> dataList= result.get(0).getDataList();
+        for (int i = 0; i < dataList.size(); i++) {
+            data += (dataList.get(i).getKey() + ";" + dataList.get(i).getValue() + "\n");
+        }
+
+        generateFile(data, fileName);
+    }
+
+
+    /**
+     * Generates file from a string.
+     *
+     * @param fileData the data to write.
+     * @param fileName the file name.
+     */
+    private static void generateFile(String fileData, String fileName) {
+        File directory = new File(CreateCSV.getTestCaseDirName());
+        if (!directory.exists()) {
+            directory.mkdirs(); // This will create the directory if it does not exist
+        }
+
+        File file = new File(directory, fileName);
+
+        try {
+            file.createNewFile();
+            FileWriter fw = new FileWriter(file);
+            fw.write(fileData);
+            fw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 

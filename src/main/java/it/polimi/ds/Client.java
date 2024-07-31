@@ -73,7 +73,12 @@ public class Client {
     }
 
 
-    public static void main(String[] args) throws UnknownHostException, IOException {
+    /**
+     * Client main.
+     *
+     * @param args args[0] = server_address; args[1] = program_path; args[2] = data_path
+     */
+    public static void main(String[] args) {
         //The path of the program to execute.
         String program;
         //The path of the data to be used in the computation.
@@ -82,6 +87,8 @@ public class Client {
         List<Pair<Integer, Integer>> data;
         //Read the user input.
         Scanner scanner = new Scanner(System.in);
+        //The counter of the number of executions.
+        int counter = 0;
 
         if (args.length == 1) {
             program = insertProgram();
@@ -97,27 +104,39 @@ public class Client {
         }
 
         while (true) {
-            Request request = new RequestBuilder()
-                    .setAllocations(2)
-                    .setProgram(ByteString.copyFromUtf8(Files.readString(Paths.get(program))))
-                    .addAllocators(Arrays.asList(args).stream()
-                            .map(Address::fromStringIp)
-                            .map(a -> a.getValue0().withPort(Allocator.PORT))
-                            .collect(Collectors.toList()))
-                    .allocate();
+            Request request = null;
+            try {
+                request = new RequestBuilder()
+                        .setAllocations(2)
+                        .setProgram(ByteString.copyFromUtf8(Files.readString(Paths.get(program))))
+                        .addAllocators(Arrays.asList(args).stream()
+                                .map(Address::fromStringIp)
+                                .map(a -> a.getValue0().withPort(Allocator.PORT))
+                                .collect(Collectors.toList()))
+                        .allocate();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
 
             data = ManageCSVfile.readCSVinput(new File(dataString));
 
-            request.sendData(data);
-//        request.sendData(data);
-            // request.sendData(data);
-            // request.sendData(data);
+            try {
+                request.sendData(data);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
 
             System.out.println("\n\nThe result:");
             request.getResponses().forEach(System.out::println);
-//            System.out.println(checkResult(request.getResponses(), "PATH RESULT"));
-            request.close();
 
+            ManageCSVfile.writeCSVresult(request.getResponses(), "compute" + counter + ".csv");
+            counter++;
+
+            try {
+                request.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
 
             System.out.println("Do you want to continue? (y/n)");
             if (scanner.nextLine().toLowerCase().equals("n")) {

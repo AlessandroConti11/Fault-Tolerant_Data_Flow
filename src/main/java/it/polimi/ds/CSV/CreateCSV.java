@@ -1,5 +1,6 @@
 package it.polimi.ds.CSV;
 
+import it.polimi.ds.function.Function;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Scanner;
 
 
 public class CreateCSV {
@@ -46,6 +48,15 @@ public class CreateCSV {
 
 
     /**
+     * Getter --> gets the directory where to save the files.
+     *
+     * @return the directory where to save the files.
+     */
+    public static String getTestCaseDirName() {
+        return testCaseDirName;
+    }
+
+    /**
      * Generates a string of random data.
      * The first row is the number of partition, the other rows are the pair key, value of single data.
      *
@@ -55,8 +66,6 @@ public class CreateCSV {
         String data = "";
 
         Random rand = new Random();
-
-        data += (rand.nextInt(partitionNumber)+1) + "\n";
 
         for (int i = 0; i < rand.nextInt(maxNumberOfData)-1; i++) {
             data += (rand.nextInt(maxNumberDataValue)+1) + ";" + (rand.nextInt(maxNumberDataValue)+1) + "\n"; // key;value
@@ -221,56 +230,10 @@ public class CreateCSV {
         //Save the operation
         List<Triplet<OperatorName, FunctionName, Integer>> operations = ManageCSVfile.readCSVoperation(operation);
 
-        List<Pair<Integer, Integer>> totalResults = new ArrayList<>();
+        tuples = new Operator().operations(operations, tuples);
 
-        // saves the partition
-        int numberOfPartition = ManageCSVfile.readCSVpartition(data);
-        int numberOfRow = tuples.size();
-        int partitionSize = (numberOfRow - 1) / numberOfPartition;
-        for (int i = 0; i < numberOfPartition; i++) {
-            int start;
-            if (i==0){
-                start = 2;
-            }
-            else {
-                start = i * partitionSize + 1;
-            }
-            int end = (i + 1) * partitionSize;
-            if (i == numberOfPartition-1){
-                end = numberOfRow + 1;
-            }
-
-            List<Pair<Integer, Integer>> tuples2Compute = ManageCSVfile.readCSVinput(data, start, end);
-
-            List<Pair<Integer, Integer>> resultTuples = new Operator().operations(operations, tuples2Compute);
-            totalResults.addAll(resultTuples);
-        }
-
-        List<Pair<Integer, Integer>> resAfterReduce =
-                Operator
-                        .lastInstructionIsReduced(
-                                operations)
-                        .map(triplet -> {
-                            // read the computed input
-                            List<Pair<Integer, Integer>> inputs = totalResults;
-
-                            // read the last reduce operation
-                            List<Triplet<OperatorName, FunctionName, Integer>> triplets = new ArrayList<>();
-                            triplets.add(triplet);
-                            // compute the final result
-                            List<Pair<Integer, Integer>> finalResult = new Operator().operations(triplets, inputs);
-
-                            return finalResult;
-                        })
-                        .orElse(totalResults);
-
-
-
-        if (!resAfterReduce.isEmpty()) {
-            for (int i = 0; i < resAfterReduce.size(); i++) {
-                result += resAfterReduce.get(i).getValue0() + ";" + resAfterReduce.get(i).getValue1() + "\n";
-            }
-            result.substring(0, result.length()-1);
+        for (int i = 0; i < tuples.size(); i++) {
+            result += tuples.get(i).getValue0() + ";" + tuples.get(i).getValue1() + "\n";
         }
 
         return result;
@@ -322,6 +285,5 @@ public class CreateCSV {
             String result = generateResult(dataFile, operationFile);
             File resultFile = generateFile(result, ("result" + i + ".csv"));
         }
-
     }
 }
