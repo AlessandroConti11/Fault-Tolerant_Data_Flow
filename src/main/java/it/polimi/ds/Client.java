@@ -122,6 +122,17 @@ public class Client {
 
             try {
                 request.sendData(data);
+
+                while (true) {
+                    System.out.println("Do you want to compute with other data? (y/n)");
+                    if (scanner.nextLine().toLowerCase().equals("n")) {
+                        break;
+                    }
+                    else {
+                        dataString = insertData();
+                        request.sendData(ManageCSVfile.readCSVinput(new File(dataString)));
+                    }
+                }
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

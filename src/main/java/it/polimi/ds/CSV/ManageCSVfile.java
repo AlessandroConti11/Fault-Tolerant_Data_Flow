@@ -230,13 +230,19 @@ public class ManageCSVfile {
      */
     public static void writeCSVresult(Vector<DataResponse> result, String fileName) {
         //The data computed.
-        String data = "";
-        List<Data> dataList= result.get(0).getDataList();
-        for (int i = 0; i < dataList.size(); i++) {
-            data += (dataList.get(i).getKey() + ";" + dataList.get(i).getValue() + "\n");
-        }
+        StringBuilder data;
+        //The list of data.
+        List<Data> dataList;
 
-        generateFile(data, fileName);
+        for (int i = 0; i < result.size(); i++) {
+            data = new StringBuilder();
+            dataList = result.get(i).getDataList();
+            for (Data value : dataList) {
+                data.append(value.getKey()).append(";").append(value.getValue()).append("\n");
+            }
+
+            generateFile(data.toString(), i + fileName);
+        }
     }
 
 
