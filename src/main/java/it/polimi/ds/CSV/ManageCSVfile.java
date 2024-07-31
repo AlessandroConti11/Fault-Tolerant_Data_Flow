@@ -57,7 +57,7 @@ public class ManageCSVfile {
             List<String[]> records = reader.readAll();
 
             // reads all input tuple
-            for (int i = 1; i < records.size(); i++) {
+            for (int i = 0; i < records.size(); i++) {
                 result.add(new Pair<>(Integer.parseInt(records.get(i)[0].split(";")[0]),
                         Integer.parseInt(records.get(i)[0].split(";")[1])));
             }
