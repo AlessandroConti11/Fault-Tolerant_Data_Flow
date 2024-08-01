@@ -556,7 +556,7 @@ public class ManageDAG {
         return Optional.empty();
     }
 
-    public boolean isGroupLast(long group_id) {
+    public boolean isLastGroup(long group_id) {
         return this.followerGroup.get(group_id) == null;
     }
 

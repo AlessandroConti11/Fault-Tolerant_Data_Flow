@@ -282,7 +282,7 @@ public class Coordinator {
         private volatile boolean network_changed = true;
         private volatile boolean alive = false;
 
-        private final boolean is_last = true;
+        private final boolean is_last;
 
         private long id;
         private Address address;
@@ -295,6 +295,10 @@ public class Coordinator {
             this.address = new Address(registration.getAddress()).withPort(WorkerManager.DATA_PORT + (int) (long) id);
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
+            this.is_last = tasks.stream()
+                .map(t -> dag.groupFromTask((long) t).get())
+                .anyMatch(g -> dag.isLastGroup(g));
+
             var operations = dag.getOperationsForTaskManager(id);
 
             /// WARNING: I don't want to touch this thing, I'm scared of it
