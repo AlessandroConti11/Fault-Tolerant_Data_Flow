@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -208,24 +210,28 @@ public class Coordinator {
         Object lock = new Object();
         try {
             while (true) {
-                int crashed = 0;
+                List<Long> crashed = new Vector<>();
                 for (var worker : workers.entrySet()) {
                     synchronized (lock) {
                         boolean alive = worker.getValue().checkAlive();
                         if (!alive) {
                             dag.addFreeTaskManager((int) (long) worker.getKey());
                             workers.remove(worker.getKey());
-                            crashed++;
+                            crashed.add(worker.getKey());
                         }
                     }
 
                 }
 
-                if (crashed > 0) {
-                    allocateResources(crashed);
+                if (crashed.size() > 0) {
+                    allocateResources(crashed.size());
                     waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
 
                     // TODO: Figure out how to send the checkpoint data
+                    //  - Figure out the running computations that impacts
+                    //  - Send send data to the one after the checkpoint
+                    //  - Maybe add a flag that tells that this is from a checkpoint?
+                    // dag.getLastCheckpoint();
                 }
             }
         } catch (Exception e) {
@@ -283,6 +289,7 @@ public class Coordinator {
         private volatile boolean alive = false;
 
         private final boolean is_last;
+        private final boolean is_checkpoint;
 
         private long id;
         private Address address;
@@ -299,9 +306,12 @@ public class Coordinator {
                 .map(t -> dag.groupFromTask((long) t).get())
                 .anyMatch(g -> dag.isLastGroup(g));
 
+            this.is_checkpoint = tasks.stream()
+                .map(t -> dag.groupFromTask((long) t).get())
+                .anyMatch(g -> dag.isCheckpoint(g));
+
             var operations = dag.getOperationsForTaskManager(id);
 
-            /// WARNING: I don't want to touch this thing, I'm scared of it
             System.out.println("max task" + dag.getMaxTasksPerGroup());
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
@@ -347,8 +357,6 @@ public class Coordinator {
             System.out.println("Data connection with " + id + " opened on "
                     + address);
 
-            // SocketChannel c = SocketChannel.open(new InetSocketAddress(address.getHost(),
-            // address.getPort()));
             data_connection = new Node(address);
 
             alive = true;
@@ -389,10 +397,11 @@ public class Coordinator {
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
-                            // assert is_checkpoint;
+                            assert is_checkpoint : "Got a writeback form a non-checkpoint manager";
+
+                            dag.saveCheckpoint(req.getCheckpointRequest());
                         } else if (req.hasResult()) {
-                            // TODO: Fix this assert, right now is_last is always true
-                            assert is_last : "Got a writeback from a non-last group";
+                            assert is_last : "Got a writeback from a non-last manager";
 
                             result_builder.addData(req.getResult());
                         } else {

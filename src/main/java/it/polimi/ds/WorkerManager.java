@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentMap;
 import com.google.protobuf.ByteString;
 
 import it.polimi.ds.proto.ProtoComputation;
+import it.polimi.ds.proto.CheckpointRequest;
 import it.polimi.ds.proto.ControlWorkerRequest;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
@@ -184,12 +185,31 @@ public class WorkerManager {
                 conn.close();
 
                 if (task.isCheckpoint()) {
-                    /// TODO: also send to the coordinator the checkpoint
+                    writeBackCheckpoint(coordinator, task);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         });
+    }
+
+    public void writeBackCheckpoint(Node node, Task task) {
+        System.out.println("Sending back checkpoint");
+        try {
+            node.send(WorkerManagerRequest.newBuilder()
+                    .setCheckpointRequest(CheckpointRequest.newBuilder()
+                            .setComputationId(task.getComputationId())
+                            .addAllData(task.getResult().stream()
+                                    .map(p -> Data.newBuilder()
+                                            .setKey(p.getValue0())
+                                            .setValue(p.getValue1())
+                                            .build())
+                                    .toList())
+                            .build())
+                    .build());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void writeBackResult(Node node, Task task) {
@@ -209,7 +229,6 @@ public class WorkerManager {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     // public void waitForFlush() {
@@ -291,7 +310,8 @@ public class WorkerManager {
                         Node conn = new Node(((SocketChannel) key.channel()).socket());
                         try {
                             DataRequest req = conn.nonBlockReceive(DataRequest.class);
-                            assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER : "Got message from unexpected source";
+                            assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER
+                                    : "Got message from unexpected source";
 
                             getTask(req.getTaskId()).addData(req);
                         } catch (ClosedChannelException e) {
