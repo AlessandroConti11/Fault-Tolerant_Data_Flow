@@ -248,9 +248,15 @@ public class Coordinator {
                                 .flatMap(Optional::stream)
                                 .distinct();
 
-                        assert comp_stream.count() == 1 : "Somehow a crash impacted more than one group";
+                        assert comp_stream.count() == 1 : "Somehow a crash impacted more than one computation";
                         long comp_id = comp_stream.findFirst().get();
-                        sendComputation(dag.getLastCheckpoint(comp_id), comp_id, dag.getGroupOfLastCheckpoint(comp_id));
+                        long grp = dag.getGroupOfLastCheckpoint(comp_id);
+                        if (grp == -1) {
+                            var data = dag.getDataRequestsForGroup(comp_id, 0);
+                            sendComputation(data, 0, comp_id, grp);
+                        } else {
+                            sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
+                        }
                     }
                 }
             }
