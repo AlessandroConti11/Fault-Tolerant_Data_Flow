@@ -321,6 +321,7 @@ public class WorkerManager {
 
     public static void main(String[] args) throws IOException {
         System.out.println("Starting WorkerManager");
+        new FaultyThread().start();
         new WorkerManager(args).start();
     }
 }

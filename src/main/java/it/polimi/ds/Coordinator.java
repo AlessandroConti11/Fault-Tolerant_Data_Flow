@@ -240,16 +240,23 @@ public class Coordinator {
                 if (crashed.size() > 0) {
                     allocateResources(crashed.size());
                     waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+                    System.out.println("Network ready");
 
                     for (long tm_id : crashed) {
                         List<Long> impacted_groups = dag.getGroupsOfTaskManager(tm_id);
-                        var comp_stream = impacted_groups.stream()
+                        var comp_list = impacted_groups.stream()
                                 .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
                                 .flatMap(Optional::stream)
-                                .distinct();
+                            .distinct()
+                            .collect(Collectors.toList());
 
-                        assert comp_stream.count() == 1 : "Somehow a crash impacted more than one computation";
-                        long comp_id = comp_stream.findFirst().get();
+                        assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
+                        if (comp_list.size() == 0) {
+                            continue;
+                        }
+
+                        var comp_id = comp_list.get(0);
+                            
                         long grp = dag.getGroupOfLastCheckpoint(comp_id);
                         if (grp == -1) {
                             var data = dag.getDataRequestsForGroup(comp_id, 0);
@@ -419,7 +426,7 @@ public class Coordinator {
             System.out.println("Worker manager connected");
 
             try {
-                while (true) {
+                while (alive) {
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
@@ -450,7 +457,7 @@ public class Coordinator {
                             network_changed = false;
                         }
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        alive = false;
                     }
                 }
 
