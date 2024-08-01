@@ -15,6 +15,8 @@ import org.javatuples.Triplet;
 import com.google.protobuf.ByteString;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public class ManageDAG {
     /**
@@ -54,26 +56,38 @@ public class ManageDAG {
     private HashMap<Long, Long> followerGroup = new HashMap<>();
 
     /**
-     * Set of checkpoints group.
-     */
-    private HashSet<Long> checkPoints = new HashSet<>();
-
-    /**
      * List of operations to be calculated in a single operation group.
      * A group of operations consists of operations until a key change operation
      * occurs.
      */
     private ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup = new ArrayList<>();
 
-    /**
-     * Data to be computed.
-     */
-    private List<Pair<Integer, Integer>> data = new ArrayList<>();
 
     /**
-     * Last checkpoint - group id, data, operation.
+     * Defines the group interval for putting a checkpoint
      */
-    private Pair<Long, List<Pair<Integer, Integer>>> lastCheckpoint;
+    private int checkpointInterval;
+
+    /**
+     * This types is like a struct, it just needs to hold the data
+     */ 
+    private class Computation {
+        static final long INVALID_GROUP = -1;
+
+        final List<Data> init_data;
+
+        volatile int fragment_count = 0;
+        long current_checkpoint_group = INVALID_GROUP;
+        DataRequest.Builder current_checkpoint = DataRequest.newBuilder();
+        long last_checkpoint_group = INVALID_GROUP;
+        DataRequest.Builder last_checkpoint;
+
+        public Computation(List<Data> init_data) {
+            this.init_data =  init_data;
+        }
+    }
+    private volatile long computation_count = 0;
+    private ConcurrentMap<Long, Computation> running_computations = new ConcurrentHashMap<>();
 
     /**
      * Constructor
@@ -106,8 +120,8 @@ public class ManageDAG {
         // divide the task in group & assign the group order
         this.divideTaskInGroup();
 
-        // TODO: how to decide how many checkpoints are needed
-        this.assignCheckpoint(2);
+        /// TODO: maybe take this as input or compute it with some heuristic?
+        checkpointInterval = 2;
     }
 
     /**
@@ -149,16 +163,25 @@ public class ManageDAG {
         return operationsGroup;
     }
 
-    public List<DataRequest.Builder> getDataRequestsForGroup(long group_id) {
+    public long newComputation(List<Data> init_data) {
+        running_computations.put(computation_count, new Computation(init_data));
+        long ret = computation_count;
+        computation_count += 1;
+        return ret;
+    }
+
+    public void finishComputation(long computation_id) {
+        running_computations.remove(computation_id);
+    }
+
+    public List<DataRequest.Builder> getDataRequestsForGroup(long computation_id, long group_id) {
         List<DataRequest.Builder> ret = new ArrayList<>(maxTasksPerGroup);
         for (int i = 0; i < maxTasksPerGroup; i++) {
             ret.add(DataRequest.newBuilder());
         }
-        for (var d : data) {
-            var task_data = ret.get(d.getValue0() % maxTasksPerGroup);
-            task_data.addData(Data.newBuilder()
-                .setKey(d.getValue0())
-                .setValue(d.getValue1()));
+        for (var d : running_computations.get(computation_id).init_data) {
+            var task_data = ret.get(d.getKey() % maxTasksPerGroup);
+            task_data.addData(d);
         }
 
         return ret; 
@@ -199,13 +222,12 @@ public class ManageDAG {
         return tasksInGroup.get(groupId);
     }
 
-    /**
-     * Getter --> gets the set of checkpoints group.
-     *
-     * @return the set of checkpoints group.
-     */
-    public HashSet<Long> getCheckPoints() {
-        return checkPoints;
+    public boolean isCheckpoint(long groupId) {
+        return (groupId % checkpointInterval) == checkpointInterval - 1;
+    }
+
+    public DataRequest.Builder getLastCheckpoint(long computation_id) {
+        return running_computations.get(computation_id).last_checkpoint;
     }
 
     /**
@@ -264,15 +286,6 @@ public class ManageDAG {
     }
 
     /**
-     * Setter --> sets the list of all data to compute.
-     *
-     * @param data the list of all data to compute.
-     */
-    public void setData(List<Pair<Integer, Integer>> data) {
-        this.data = data;
-    }
-
-    /**
      * Setter --> sets the map between the TaskID and the TaskManagerID.
      *
      * @param taskIsInTaskManager the map between the TaskID and the TaskManagerID.
@@ -288,15 +301,6 @@ public class ManageDAG {
      */
     public void setTasksInGroup(HashMap<Long, HashSet<Long>> tasksInGroup) {
         this.tasksInGroup = tasksInGroup;
-    }
-
-    /**
-     * Setter --> sets the set of checkpoints group.
-     *
-     * @param checkPoints the set of checkpoints group.
-     */
-    public void setCheckPoints(HashSet<Long> checkPoints) {
-        this.checkPoints = checkPoints;
     }
 
     /**
@@ -407,35 +411,6 @@ public class ManageDAG {
 
     }
 
-    /**
-     * Assigns which groups are checkpoints.
-     *
-     * @param numberOfCheckpoint the number of checkpoints requested.
-     */
-    public void assignCheckpoint(int numberOfCheckpoint) {
-        // Checkpoints.
-        HashSet<Long> cp = new HashSet<>();
-
-        if (numberOfCheckpoint > this.operationsGroup.size()) {
-            // assigns each group as a checkpoint
-            cp.addAll(tasksInGroup.keySet());
-        } else {
-            // Index.
-            int i = 0;
-            for (Long groupID : tasksInGroup.keySet()) {
-                // assigns as checkpoints only checkpoints that are multiple of the required
-                // number of checkpoints
-                if (i % (this.operationsGroup.size() / numberOfCheckpoint) == 0) {
-                    cp.add(groupID);
-                }
-                i++;
-            }
-        }
-
-        // sets the checkpoints
-        this.setCheckPoints(cp);
-    }
-
     public Optional<Long> getNextFreeTaskManager() {
         if (freeTaskManagers.size() > 0) {
             return Optional.of(freeTaskManagers.remove(freeTaskManagers.size() - 1));
@@ -466,7 +441,7 @@ public class ManageDAG {
     public Set<Long> getManagersOfNextGroup(long group_id) {
         if (!tasksInGroup.containsKey(group_id + 1)) {
             /// This is the last group. So no task manager is needed.
-            assert group_id == tasksInGroup.size() - 1;
+            assert group_id == tasksInGroup.size() - 1 : "Group is not the last";
 
             return new HashSet<>();
         }
@@ -558,15 +533,18 @@ public class ManageDAG {
      *                          and list of operations to be saved.
      */
     public void saveCheckpoint(CheckpointRequest checkpointRequest) {
-        if (this.lastCheckpoint.getValue0() != checkpointRequest.getGroupId()) {
-            // Save the data.
-            List<Pair<Integer, Integer>> dataCheckpoint = ManageCSVfile.readCSVinput(checkpointRequest.getDataList());
-            this.lastCheckpoint = new Pair<>(checkpointRequest.getGroupId(), dataCheckpoint);
-        } else {
-            // Add the data.
-            List<Pair<Integer, Integer>> dataCheckpoint = this.lastCheckpoint.getValue1();
-            dataCheckpoint.addAll(ManageCSVfile.readCSVinput(checkpointRequest.getDataList()));
-            this.lastCheckpoint.setAt1(dataCheckpoint);
+        var comp = running_computations.get(checkpointRequest.getComputationId());
+
+        assert comp.last_checkpoint_group != checkpointRequest.getGroupId() : "Got checkpoint from unexpected source";
+        if (comp.fragment_count == 0) comp.current_checkpoint_group = checkpointRequest.getGroupId();
+
+        comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
+        comp.fragment_count += 1;
+
+        if (comp.fragment_count == maxTasksPerGroup) {
+            comp.last_checkpoint = comp.current_checkpoint;
+            comp.last_checkpoint_group = comp.current_checkpoint_group;
+            comp.fragment_count = 0;
         }
     }
 
@@ -576,6 +554,10 @@ public class ManageDAG {
         }
 
         return Optional.empty();
+    }
+
+    public boolean isGroupLast(long group_id) {
+        return this.followerGroup.get(group_id) == null;
     }
 
     /*

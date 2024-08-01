@@ -22,7 +22,7 @@ import it.polimi.ds.proto.AllocationResponse;
 import it.polimi.ds.proto.ClientRequest;
 import it.polimi.ds.proto.CloseRequest;
 import it.polimi.ds.proto.CloseResponse;
-import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.ProtoComputation;
 import it.polimi.ds.proto.ControlWorkerRequest;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
@@ -133,18 +133,20 @@ public class Coordinator {
                     if (req.hasDataRequest()) {
                         System.out.println("Received data request ");
                         var data_req = req.getDataRequest();
-                        assert data_req.getSourceRole() == Role.CLIENT;
-                        result_builder = new ResultBuilder(dag.getMaxTasksPerGroup());
+                        assert data_req.getSourceRole() == Role.CLIENT
+                                : "Computation request somehow didn't come from the client";
+                        long comp_id = dag.newComputation(data_req.getDataList());
 
-                        dag.setData(ManageCSVfile.readCSVinput(data_req.getDataList()));
+                        result_builder = new ResultBuilder(comp_id, dag.getMaxTasksPerGroup());
 
-                        var data = dag.getDataRequestsForGroup(0);
+                        var data = dag.getDataRequestsForGroup(comp_id, 0);
                         System.out.println(data);
 
                         dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
                             try {
                                 workers.get(dag.getManagerOfTask((long) t).get())
                                         .send(data.get((int) (long) t)
+                                                .setComputationId(comp_id)
                                                 .setSourceRole(Role.MANAGER)
                                                 .setTaskId(t)
                                                 .build());
@@ -154,6 +156,7 @@ public class Coordinator {
                         });
 
                         client.send(result_builder.waitForResult());
+                        dag.finishComputation(comp_id);
                     } else if (req.hasCloseRequest()) {
                         System.out.println("Closing connection");
                         workers.values().parallelStream().forEach(w -> {
@@ -236,11 +239,16 @@ public class Coordinator {
         private final int max_data_count;
         private Object lock = new Object();
 
-        public ResultBuilder(int max_data_count) {
+        public ResultBuilder(long comp_id, int max_data_count) {
             this.max_data_count = max_data_count;
+            resp_aggregator.setComputationId(comp_id);
         }
 
         public synchronized void addData(DataResponse r) {
+            assert resp_aggregator.getComputationId() == r.getComputationId()
+                    : "Getting results for a different computation " + r.getComputationId() + " want: "
+                            + resp_aggregator.getComputationId();
+
             resp_aggregator.addAllData(r.getDataList());
             response_count += 1;
             System.out.println("resp_count : " + response_count + " max : " + max_data_count);
@@ -252,6 +260,7 @@ public class Coordinator {
         }
 
         public DataResponse waitForResult() {
+            System.out.println("Waiting for results");
             synchronized (lock) {
                 try {
                     lock.wait();
@@ -259,6 +268,8 @@ public class Coordinator {
                     e.printStackTrace();
                 }
             }
+
+            System.out.println("Sending back results for " + resp_aggregator.getComputationId());
             return resp_aggregator.build();
         }
     }
@@ -294,12 +305,12 @@ public class Coordinator {
                             .map(t -> ProtoTask.newBuilder()
                                     .setId(t)
                                     .setGroupId(dag.groupFromTask((long) t).get())
-                                    .setIsCheckpoint(0) // TODO: Fix this
+                                    .setIsCheckpoint(dag.isCheckpoint(dag.groupFromTask((long) t).get()) ? 1 : 0)
                                     .build())
                             .collect(Collectors.toList()))
                     .setGroupSize(dag.getMaxTasksPerGroup())
                     .addAllComputations(operations.stream()
-                            .map(op -> Computation.newBuilder()
+                            .map(op -> ProtoComputation.newBuilder()
                                     .setGroupId(op.getValue1())
                                     .addAllManagersMapping(
                                             dag.getManagersOfNextGroup((long) op.getValue1()).stream()
@@ -376,11 +387,12 @@ public class Coordinator {
                         if (req.hasCheckpointRequest()) {
                             // assert is_checkpoint;
                         } else if (req.hasResult()) {
-                            assert is_last;
+                            // TODO: Fix this assert, right now is_last is always true
+                            assert is_last : "Got a writeback from a non-last group";
 
                             result_builder.addData(req.getResult());
                         } else {
-                            assert false;
+                            assert false : "Forgot to add the handling case for a new message";
                         }
                         // TODO: dag.putChecckpointData();
                         // Also, we need dag.getCheckpointData();
@@ -406,7 +418,7 @@ public class Coordinator {
                     }
                 }
 
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 System.out.println("Exception escaped");
                 e.printStackTrace();
             }

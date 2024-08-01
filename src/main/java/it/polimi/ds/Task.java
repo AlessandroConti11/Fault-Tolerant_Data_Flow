@@ -4,7 +4,7 @@ import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.Operator;
 import it.polimi.ds.function.OperatorName;
-import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.ProtoComputation;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.Role;
@@ -21,11 +21,12 @@ import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 class Task {
+    private long current_computation_id = -1;
     private final long id;
     private final long group_id;
     private final boolean is_checkpoint;
     private final int group_size;
-    private final Computation computation;
+    private final ProtoComputation computation;
 
     private volatile boolean has_all_data = false;
     private int data_count = 0;
@@ -33,7 +34,7 @@ class Task {
 
     private List<Pair<Integer, Integer>>  result;
 
-    public Task(long id, long group_id, Computation computation, boolean is_checkpoint, int group_size) {
+    public Task(long id, long group_id, ProtoComputation computation, boolean is_checkpoint, int group_size) {
         assert group_size > 0;
         assert id >= 0;
         
@@ -54,13 +55,8 @@ class Task {
         return id;
     }
 
-    /**
-     * Getter --> gets the group id.
-     *
-     * @return the id of the group to which the task belongs.
-     */
-    public long getGroup_id() {
-        return group_id;
+    public long getComputationId() {
+        return current_computation_id;
     }
 
     public boolean isReady() {
@@ -74,10 +70,12 @@ class Task {
         data.clear();
     }
 
-    // TODO: Reset counted for new computation.
     public void addData(DataRequest req) {
         assert has_all_data == false;
         assert data_count < group_size;
+
+        if (data_count == 0) current_computation_id = req.getComputationId();
+        assert current_computation_id == req.getComputationId();
 
         this.data.addAll(req.getDataList());
         if (req.getSourceRole() == Role.MANAGER) {

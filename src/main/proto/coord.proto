@@ -38,17 +38,22 @@ message WorkerManagerRequest {
 }
 message DataRequest {
   int64 task_id = 1;
-  Role source_role = 2;
-  repeated Data data = 3;
+  int64 computation_id = 2;
+  Role source_role = 3;
+  repeated Data data = 4;
 }
-message DataResponse { repeated Data data = 1; }
+message DataResponse {
+  int64 computation_id = 1;
+  repeated Data data = 2;
+}
 
 message CloseRequest {}
 message CloseResponse {}
 
 message CheckpointRequest {
   int64 group_id = 1;
-  repeated Data data = 2;
+  int64 computation_id = 2;
+  repeated Data data = 3;
 }
 
 message CheckpointResponse {}
@@ -65,7 +70,7 @@ message RegisterNodeManagerResponse {
   int64 id = 1;
   int32 group_size = 2;
   repeated ProtoTask tasks = 3;
-  repeated Computation computations = 4;
+  repeated ProtoComputation computations = 4;
 }
 
 message ProtoTask {
@@ -74,7 +79,7 @@ message ProtoTask {
   int32 is_checkpoint = 3;
 }
 
-message Computation {
+message ProtoComputation {
   int64 group_id = 1;
   repeated ManagerTaskMap managers_mapping = 2;
   repeated Operation operations = 3;

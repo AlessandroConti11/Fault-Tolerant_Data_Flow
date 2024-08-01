@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.google.protobuf.ByteString;
 
-import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.ProtoComputation;
 import it.polimi.ds.proto.ControlWorkerRequest;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
@@ -42,7 +42,7 @@ public class WorkerManager {
 
     private Vector<Task> tasks = new Vector<>(TASK_SLOTS);
     // Computation has a pair of group_id and the list of operations
-    private List<Computation> computations;
+    private List<ProtoComputation> computations;
 
     private Address coordinator_address;
     private Node coordinator;
@@ -77,8 +77,8 @@ public class WorkerManager {
      * @param groupId the id of the group to get the computation of.
      * @return the computation of the group requested.
      */
-    Computation getComputation(long groupId) {
-        for (Computation computation : computations) {
+    ProtoComputation getComputation(long groupId) {
+        for (var computation : computations) {
             if (computation.getGroupId() == groupId) {
                 return computation;
             }
@@ -151,7 +151,9 @@ public class WorkerManager {
         List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
 
         /// Assert that we have only one group as a successors
-        assert successors.entrySet().stream().map(e -> e.getValue().size()).reduce(0, (sum, val) -> sum + val) == group_size;
+        assert successors.entrySet().stream().map(e -> e.getValue().size()).reduce(0,
+                (sum, val) -> sum + val) == group_size
+                : "Aggregated number of successors doesn't match group size: " + group_size;
 
         successors.keySet().parallelStream().forEach(successor_id -> {
             var successor = network_nodes.get(successor_id);
@@ -164,14 +166,14 @@ public class WorkerManager {
 
             try {
                 Node conn = new Node(successor);
-                // TODO: Divide the result to send to the next thing
                 System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
 
                 successors.get(successor_id).stream().forEach(next_task_id -> {
-                    assert task.getId() < next_task_id;
+                    assert task.getId() < next_task_id : "Task id is in successors group";
 
                     var req = requests.get((int) (next_task_id % task.getGroupSize()))
                             .setSourceRole(Role.WORKER)
+                            .setComputationId(task.getComputationId())
                             .setTaskId(next_task_id).build();
                     try {
                         conn.send(req);
@@ -195,6 +197,7 @@ public class WorkerManager {
         try {
             node.send(WorkerManagerRequest.newBuilder()
                     .setResult(DataResponse.newBuilder()
+                            .setComputationId(task.getComputationId())
                             .addAllData(task.getResult().stream()
                                     .map(p -> Data.newBuilder()
                                             .setKey(p.getValue0())
@@ -210,13 +213,13 @@ public class WorkerManager {
     }
 
     // public void waitForFlush() {
-    //     synchronized (flush_lock) {
-    //         try {
-    //             flush_lock.wait();
-    //         } catch (InterruptedException e) {
-    //             e.printStackTrace();
-    //         }
-    //     }
+    // synchronized (flush_lock) {
+    // try {
+    // flush_lock.wait();
+    // } catch (InterruptedException e) {
+    // e.printStackTrace();
+    // }
+    // }
     // }
 
     /// Main thread handles the connection with the coordinator that listens for
@@ -237,12 +240,12 @@ public class WorkerManager {
             }
 
             // if (req.hasFlushRequest()) {
-            //     synchronized (flush_lock) {
-            //         flush_lock.notifyAll();
-            //     }
+            // synchronized (flush_lock) {
+            // flush_lock.notifyAll();
+            // }
             // }
 
-            assert req.hasUpdateNetworkRequest();
+            assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle";
             var network_change = req.getUpdateNetworkRequest();
 
             var nodes = network_change.getAddressesList();
@@ -288,7 +291,7 @@ public class WorkerManager {
                         Node conn = new Node(((SocketChannel) key.channel()).socket());
                         try {
                             DataRequest req = conn.nonBlockReceive(DataRequest.class);
-                            assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER;
+                            assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER : "Got message from unexpected source";
 
                             getTask(req.getTaskId()).addData(req);
                         } catch (ClosedChannelException e) {

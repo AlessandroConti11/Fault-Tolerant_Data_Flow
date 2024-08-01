@@ -5,7 +5,7 @@ import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvException;
 import it.polimi.ds.function.FunctionName;
 import it.polimi.ds.function.OperatorName;
-import it.polimi.ds.proto.Computation;
+import it.polimi.ds.proto.ProtoComputation;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.Operation;
@@ -185,7 +185,7 @@ public class ManageCSVfile {
      * @param operation the CSV input file.
      * @return the operation to be carried out.
      */
-    public static List<Triplet<OperatorName, FunctionName, Integer>> readCSVoperation(Computation operation) {
+    public static List<Triplet<OperatorName, FunctionName, Integer>> readCSVoperation(ProtoComputation operation) {
         //list of operation to return
         List<Triplet<OperatorName, FunctionName, Integer>> result = new ArrayList<>();
 
