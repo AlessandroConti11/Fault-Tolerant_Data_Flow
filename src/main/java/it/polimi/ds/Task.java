@@ -28,16 +28,18 @@ class Task {
     private final int group_size;
     private final ProtoComputation computation;
 
+    private List<Long> received_data_from = new Vector<>();
     private volatile boolean has_all_data = false;
     private int data_count = 0;
     private List<Data> data;
+    private boolean already_computed = false;
 
-    private List<Pair<Integer, Integer>>  result;
+    private List<Pair<Integer, Integer>> result;
 
     public Task(long id, long group_id, ProtoComputation computation, boolean is_checkpoint, int group_size) {
         assert group_size > 0;
         assert id >= 0;
-        
+
         this.id = id;
         this.is_checkpoint = is_checkpoint;
         this.group_id = group_id;
@@ -64,19 +66,25 @@ class Task {
     }
 
     public void reset() {
-        System.out.println("RESET");
         has_all_data = false;
         data_count = 0;
         data.clear();
+        received_data_from = new Vector<>();
+        already_computed = false;
     }
 
     public void addData(DataRequest req) {
+        if (received_data_from.contains(req.getSrcTask()))
+            return;
+
         assert has_all_data == false;
         assert data_count < group_size;
 
-        if (data_count == 0) current_computation_id = req.getComputationId();
+        if (data_count == 0)
+            current_computation_id = req.getComputationId();
         assert current_computation_id == req.getComputationId();
 
+        received_data_from.add(req.getSrcTask());
         this.data.addAll(req.getDataList());
         if (req.getSourceRole() == Role.MANAGER) {
             data_count = group_size;
@@ -90,6 +98,29 @@ class Task {
             synchronized (this) {
                 this.notifyAll();
             }
+        }
+    }
+
+    public boolean hasAlreadyComputed() {
+        return already_computed;
+    }
+
+    public void restartFromCheckpoint(DataRequest req) {
+        if (received_data_from.contains(req.getSrcTask()))
+            return;
+
+        if (!hasAlreadyComputed()) {
+            assert data_count == 0;
+            current_computation_id = req.getComputationId();
+            this.data.addAll(req.getDataList());
+
+            data_count = group_size;
+            has_all_data = true;
+        }
+        assert current_computation_id == req.getComputationId();
+
+        synchronized (this) {
+            this.notifyAll();
         }
     }
 
@@ -109,13 +140,12 @@ class Task {
         for (var d : result) {
             var task_data = ret.get(d.getValue0() % group_size);
             task_data.addData(Data.newBuilder()
-                .setKey(d.getValue0())
-                .setValue(d.getValue1()));
+                    .setKey(d.getValue0())
+                    .setValue(d.getValue1()));
         }
 
-        return ret; 
+        return ret;
     }
-
 
     /**
      * Perform the operation.
@@ -130,6 +160,8 @@ class Task {
                 .readCSVoperation(computation);
 
         result = new Operator().operations(operationToCompute, dataToCompute);
+
+        already_computed = true;
     }
 
     public void waitForData() {
@@ -142,9 +174,9 @@ class Task {
         }
     }
 
-	public List<Pair<Integer, Integer>> getResult() {
-		return result;
-	}
+    public List<Pair<Integer, Integer>> getResult() {
+        return result;
+    }
 
     public int getGroupSize() {
         return group_size;

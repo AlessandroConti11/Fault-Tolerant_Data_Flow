@@ -137,8 +137,10 @@ public class WorkerManager {
     public void processTask(Task task) {
         task.waitForData();
 
-        /// Now the task has all the data, we can execute it
-        task.execute();
+        if (!task.hasAlreadyComputed()) {
+            /// Now the task has all the data, we can execute it
+            task.execute();
+        }
 
         /// TODO: successors are not passed properly, idk why. <- Maybe outdated
         var successors = task.getSuccessorMap();
@@ -174,6 +176,7 @@ public class WorkerManager {
 
                     var req = requests.get((int) (next_task_id % task.getGroupSize()))
                             .setSourceRole(Role.WORKER)
+                            .setSrcTask(task.getId())
                             .setComputationId(task.getComputationId())
                             .setTaskId(next_task_id).build();
                     try {
@@ -231,16 +234,6 @@ public class WorkerManager {
         }
     }
 
-    // public void waitForFlush() {
-    // synchronized (flush_lock) {
-    // try {
-    // flush_lock.wait();
-    // } catch (InterruptedException e) {
-    // e.printStackTrace();
-    // }
-    // }
-    // }
-
     /// Main thread handles the connection with the coordinator that listens for
     /// changes in the network
     public void start() {
@@ -257,12 +250,6 @@ public class WorkerManager {
                 System.out.println("Bye bye");
                 System.exit(0);
             }
-
-            // if (req.hasFlushRequest()) {
-            // synchronized (flush_lock) {
-            // flush_lock.notifyAll();
-            // }
-            // }
 
             assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle";
             var network_change = req.getUpdateNetworkRequest();
@@ -313,7 +300,12 @@ public class WorkerManager {
                             assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER
                                     : "Got message from unexpected source";
 
-                            getTask(req.getTaskId()).addData(req);
+                            Task t = getTask(req.getTaskId());
+                            if (!req.hasCrashedGroup()) {
+                                t.addData(req);
+                            } else {
+                                t.restartFromCheckpoint(req);
+                            }
                         } catch (ClosedChannelException e) {
                             conn.close();
                         }

@@ -6,6 +6,7 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -26,6 +27,7 @@ import it.polimi.ds.proto.CloseRequest;
 import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.ProtoComputation;
 import it.polimi.ds.proto.ControlWorkerRequest;
+import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
 import it.polimi.ds.proto.ManagerTaskMap;
@@ -144,18 +146,7 @@ public class Coordinator {
                         var data = dag.getDataRequestsForGroup(comp_id, 0);
                         System.out.println(data);
 
-                        dag.getTasksOfGroup(0).parallelStream().forEach(t -> {
-                            try {
-                                workers.get(dag.getManagerOfTask((long) t).get())
-                                        .send(data.get((int) (long) t)
-                                                .setComputationId(comp_id)
-                                                .setSourceRole(Role.MANAGER)
-                                                .setTaskId(t)
-                                                .build());
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
+                        sendComputation(data, 0, comp_id);
 
                         client.send(result_builder.waitForResult());
                         dag.finishComputation(comp_id);
@@ -186,6 +177,29 @@ public class Coordinator {
             e.printStackTrace();
         }
     });
+
+    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id) {
+        sendComputation(data, group_id, comp_id, -1);
+    }
+
+    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id, long checkpoint) {
+        dag.getTasksOfGroup(group_id).parallelStream().forEach(t -> {
+            try {
+                var req = data.get((int) (long) t)
+                        .setComputationId(comp_id)
+                        .setSourceRole(Role.MANAGER)
+                        .setTaskId(t)
+                        .setSrcTask(-1);
+                if (checkpoint != -1) {
+                    req.setCrashedGroup(checkpoint);
+                }
+                workers.get(dag.getManagerOfTask((long) t).get())
+                        .send(req.build());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
 
     Thread workerListener = new Thread(() -> {
         ExecutorService executors = Executors.newCachedThreadPool();
@@ -227,11 +241,17 @@ public class Coordinator {
                     allocateResources(crashed.size());
                     waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
 
-                    // TODO: Figure out how to send the checkpoint data
-                    //  - Figure out the running computations that impacts
-                    //  - Send send data to the one after the checkpoint
-                    //  - Maybe add a flag that tells that this is from a checkpoint?
-                    // dag.getLastCheckpoint();
+                    for (long tm_id : crashed) {
+                        List<Long> impacted_groups = dag.getGroupsOfTaskManager(tm_id);
+                        var comp_stream = impacted_groups.stream()
+                                .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
+                                .flatMap(Optional::stream)
+                                .distinct();
+
+                        assert comp_stream.count() == 1 : "Somehow a crash impacted more than one group";
+                        long comp_id = comp_stream.findFirst().get();
+                        sendComputation(dag.getLastCheckpoint(comp_id), comp_id, dag.getGroupOfLastCheckpoint(comp_id));
+                    }
                 }
             }
         } catch (Exception e) {
@@ -303,12 +323,12 @@ public class Coordinator {
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
             this.is_last = tasks.stream()
-                .map(t -> dag.groupFromTask((long) t).get())
-                .anyMatch(g -> dag.isLastGroup(g));
+                    .map(t -> dag.groupFromTask((long) t).get())
+                    .anyMatch(g -> dag.isLastGroup(g));
 
             this.is_checkpoint = tasks.stream()
-                .map(t -> dag.groupFromTask((long) t).get())
-                .anyMatch(g -> dag.isCheckpoint(g));
+                    .map(t -> dag.groupFromTask((long) t).get())
+                    .anyMatch(g -> dag.isCheckpoint(g));
 
             var operations = dag.getOperationsForTaskManager(id);
 
@@ -407,9 +427,6 @@ public class Coordinator {
                         } else {
                             assert false : "Forgot to add the handling case for a new message";
                         }
-                        // TODO: dag.putChecckpointData();
-                        // Also, we need dag.getCheckpointData();
-
                     } catch (SocketTimeoutException e) {
                         if (network_changed) {
                             control_connection.send(

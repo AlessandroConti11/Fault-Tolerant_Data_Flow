@@ -1,5 +1,23 @@
 package it.polimi.ds.Directed_Acyclic_Graph;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.Set;
+import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
+
+import org.javatuples.Pair;
+import org.javatuples.Triplet;
+
+import com.google.protobuf.ByteString;
+
 import it.polimi.ds.Exceptions;
 import it.polimi.ds.WorkerManager;
 import it.polimi.ds.CSV.ManageCSVfile;
@@ -9,14 +27,6 @@ import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.CheckpointRequest;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
-import org.javatuples.Pair;
-import org.javatuples.Triplet;
-
-import com.google.protobuf.ByteString;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public class ManageDAG {
     /**
@@ -62,7 +72,6 @@ public class ManageDAG {
      */
     private ArrayList<List<Triplet<OperatorName, FunctionName, Integer>>> operationsGroup = new ArrayList<>();
 
-
     /**
      * Defines the group interval for putting a checkpoint
      */
@@ -70,7 +79,7 @@ public class ManageDAG {
 
     /**
      * This types is like a struct, it just needs to hold the data
-     */ 
+     */
     private class Computation {
         static final long INVALID_GROUP = -1;
 
@@ -83,9 +92,10 @@ public class ManageDAG {
         DataRequest.Builder last_checkpoint;
 
         public Computation(List<Data> init_data) {
-            this.init_data =  init_data;
+            this.init_data = init_data;
         }
     }
+
     private volatile long computation_count = 0;
     private ConcurrentMap<Long, Computation> running_computations = new ConcurrentHashMap<>();
 
@@ -175,16 +185,20 @@ public class ManageDAG {
     }
 
     public List<DataRequest.Builder> getDataRequestsForGroup(long computation_id, long group_id) {
+        return generateDataRequests(running_computations.get(computation_id).init_data, computation_id, group_id);
+    }
+
+    private List<DataRequest.Builder> generateDataRequests(List<Data> data, long comp_id, long group_id) {
         List<DataRequest.Builder> ret = new ArrayList<>(maxTasksPerGroup);
         for (int i = 0; i < maxTasksPerGroup; i++) {
             ret.add(DataRequest.newBuilder());
         }
-        for (var d : running_computations.get(computation_id).init_data) {
+        for (var d : data) {
             var task_data = ret.get(d.getKey() % maxTasksPerGroup);
             task_data.addData(d);
         }
 
-        return ret; 
+        return ret;
     }
 
     public int getMaxTasksPerGroup() {
@@ -226,8 +240,15 @@ public class ManageDAG {
         return (groupId % checkpointInterval) == checkpointInterval - 1;
     }
 
-    public DataRequest.Builder getLastCheckpoint(long computation_id) {
-        return running_computations.get(computation_id).last_checkpoint;
+    public List<DataRequest.Builder> getLastCheckpoint(long computation_id) {
+        return generateDataRequests(
+                running_computations.get(computation_id).last_checkpoint.getDataList(),
+                computation_id,
+                running_computations.get(computation_id).last_checkpoint_group);
+    }
+
+    public long getGroupOfLastCheckpoint(long computation_id) {
+        return running_computations.get(computation_id).last_checkpoint_group;
     }
 
     /**
@@ -536,7 +557,8 @@ public class ManageDAG {
         var comp = running_computations.get(checkpointRequest.getComputationId());
 
         assert comp.last_checkpoint_group != checkpointRequest.getGroupId() : "Got checkpoint from unexpected source";
-        if (comp.fragment_count == 0) comp.current_checkpoint_group = checkpointRequest.getGroupId();
+        if (comp.fragment_count == 0)
+            comp.current_checkpoint_group = checkpointRequest.getGroupId();
 
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
         comp.fragment_count += 1;
@@ -558,6 +580,24 @@ public class ManageDAG {
 
     public boolean isLastGroup(long group_id) {
         return this.followerGroup.get(group_id) == null;
+    }
+
+    public Optional<Long> getCurrentComputationOfGroup(long group_id) {
+        var computations = running_computations.values().stream()
+                .filter(comp -> comp.last_checkpoint_group < group_id && comp.current_checkpoint_group >= group_id)
+                .collect(Collectors.toList());
+        assert computations.size() <= 1 : "Somehow there are 2 overlapping computations";
+
+        if (computations.size() == 0)
+            return Optional.empty();
+        for (var entry : running_computations.entrySet()) {
+            if (entry.getValue().equals(computations.get(0))) {
+                return Optional.of(entry.getKey());
+            }
+        }
+
+        assert false : "Uncreachable";
+        return Optional.empty();
     }
 
     /*
