@@ -252,11 +252,13 @@ public class Coordinator {
 
                         assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
                         if (comp_list.size() == 0) {
+                            System.out.println("No running computation impacted");
                             continue;
                         }
 
                         var comp_id = comp_list.get(0);
-                            
+
+                        System.out.println("Sending checkpoint");
                         long grp = dag.getGroupOfLastCheckpoint(comp_id);
                         if (grp == -1) {
                             var data = dag.getDataRequestsForGroup(comp_id, 0);

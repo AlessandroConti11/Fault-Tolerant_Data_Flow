@@ -173,15 +173,15 @@ public class Client {
         data.add(new Pair<>(1, 1));
         data.add(new Pair<>(2, 2));
 
-        synchronized (data) {
-            try {
-                data.wait();
-            } catch (Exception e) {}
-        }
-        // request.sendData(data);
-        // request.sendData(data);
-        // request.sendData(data);
-        // request.sendData(data);
+        // synchronized (data) {
+        //     try {
+        //         data.wait();
+        //     } catch (Exception e) {}
+        // }
+        request.sendData(data);
+        request.sendData(data);
+        request.sendData(data);
+        request.sendData(data);
 
         request.getResponses().forEach(System.out::println);
         request.close();

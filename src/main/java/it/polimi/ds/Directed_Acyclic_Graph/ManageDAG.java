@@ -86,13 +86,21 @@ public class ManageDAG {
         final List<Data> init_data;
 
         volatile int fragment_count = 0;
-        long current_checkpoint_group = INVALID_GROUP;
+        long current_checkpoint_group = checkpointInterval - 1;
         DataRequest.Builder current_checkpoint = DataRequest.newBuilder();
         long last_checkpoint_group = INVALID_GROUP;
         DataRequest.Builder last_checkpoint;
 
         public Computation(List<Data> init_data) {
             this.init_data = init_data;
+        }
+
+        @Override
+        public String toString() {
+            return "Computation{fragment_count:" + fragment_count
+                   + ", current_checkpoint_group:" + current_checkpoint_group
+                   + ", last_checkpoint_group:" + last_checkpoint_group
+                   + "}";
         }
     }
 
@@ -557,8 +565,6 @@ public class ManageDAG {
         var comp = running_computations.get(checkpointRequest.getComputationId());
 
         assert comp.last_checkpoint_group != checkpointRequest.getGroupId() : "Got checkpoint from unexpected source";
-        if (comp.fragment_count == 0)
-            comp.current_checkpoint_group = checkpointRequest.getGroupId();
 
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
         comp.fragment_count += 1;
@@ -566,6 +572,7 @@ public class ManageDAG {
         if (comp.fragment_count == maxTasksPerGroup) {
             comp.last_checkpoint = comp.current_checkpoint;
             comp.last_checkpoint_group = comp.current_checkpoint_group;
+            comp.current_checkpoint_group += checkpointInterval;
             comp.fragment_count = 0;
         }
     }

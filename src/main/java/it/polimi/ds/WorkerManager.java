@@ -136,6 +136,7 @@ public class WorkerManager {
 
     public void processTask(Task task) {
         task.waitForData();
+        FaultyThread.maybeCrash();
 
         if (!task.hasAlreadyComputed()) {
             /// Now the task has all the data, we can execute it

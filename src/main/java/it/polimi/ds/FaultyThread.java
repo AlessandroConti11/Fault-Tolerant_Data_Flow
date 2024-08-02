@@ -16,24 +16,35 @@ public class FaultyThread extends Thread {
 
     private Random random = new Random();
 
-    @Override
-    public void run() {
+    public static void maybeCrash() {
         if (dotenv.get("FAULTY_THREADS") != null &&
                 dotenv.get("FAULTY_THREADS").toLowerCase().equals("true")) {
-            System.err.println("\u001B[33mStarting faulty thread, good luck!\u001B[0m");
-            while (true) {
-                try {
-                    Thread.sleep(SLEEP_TIME);
-                    double randomInt = random.nextDouble();
-                    if (randomInt < FAULT_PROBABILITY) {
-                        System.err.println("Simulating a fault in the thread");
-                        System.exit(1);
-                    }
-                } catch (Exception e) {
-                    System.err.println("Simulating a fault in the thread");
-                    System.exit(1);
-                }
+            Random r = new Random();
+            if (r.nextDouble() < FAULT_PROBABILITY) {
+                System.err.println(Allocator.RED + "Simulating a fault in the thread" + Allocator.RESET);
+                System.exit(1);
             }
         }
+    }
+
+    @Override
+    public void run() {
+    //     if (dotenv.get("FAULTY_THREADS") != null &&
+    //             dotenv.get("FAULTY_THREADS").toLowerCase().equals("true")) {
+    //         System.err.println("\u001B[33mStarting faulty thread, good luck!\u001B[0m");
+    //         while (true) {
+    //             try {
+    //                 Thread.sleep(SLEEP_TIME);
+    //                 double randomInt = random.nextDouble();
+    //                 if (randomInt < FAULT_PROBABILITY) {
+    //                     System.err.println("Simulating a fault in the thread");
+    //                     System.exit(1);
+    //                 }
+    //             } catch (Exception e) {
+    //                 System.err.println("Simulating a fault in the thread");
+    //                 System.exit(1);
+    //             }
+    //         }
+    //     }
     }
 }
