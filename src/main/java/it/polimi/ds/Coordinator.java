@@ -300,9 +300,9 @@ public class Coordinator {
 
     class ResultBuilder {
         private DataResponse.Builder resp_aggregator = DataResponse.newBuilder();
-        private volatile int response_count = 0;
         private final int max_data_count;
         private Object lock = new Object();
+        private Vector<Long> fragments = new Vector<>();
 
         public ResultBuilder(long comp_id, int max_data_count) {
             this.max_data_count = max_data_count;
@@ -312,12 +312,17 @@ public class Coordinator {
         public synchronized void addData(DataResponse r) {
             assert resp_aggregator.getComputationId() == r.getComputationId()
                     : "Getting results for a different computation " + r.getComputationId() + " want: "
-                            + resp_aggregator.getComputationId();
+                      + resp_aggregator.getComputationId();
+
+            assert fragments.size() < max_data_count : "A computation is still going after it has finished";
+
+            /// TODO: assert that this comes from a repeated computation somehow
+            if (fragments.contains(r.getSourceTask())) return;
 
             resp_aggregator.addAllData(r.getDataList());
-            response_count += 1;
-            System.out.println("resp_count : " + response_count + " max : " + max_data_count);
-            if (response_count >= max_data_count) {
+            fragments.add(r.getSourceTask());
+            System.out.println("fragments : " + fragments + " max : " + max_data_count);
+            if (fragments.size() >= max_data_count) {
                 synchronized (lock) {
                     lock.notifyAll();
                 }

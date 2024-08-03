@@ -46,7 +46,8 @@ message DataRequest {
 }
 message DataResponse {
   int64 computation_id = 1;
-  repeated Data data = 2;
+  int64 source_task = 2;
+  repeated Data data = 3;
 }
 
 message CloseRequest {}

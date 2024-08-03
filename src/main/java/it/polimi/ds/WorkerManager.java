@@ -223,6 +223,7 @@ public class WorkerManager {
             node.send(WorkerManagerRequest.newBuilder()
                     .setResult(DataResponse.newBuilder()
                             .setComputationId(task.getComputationId())
+                            .setSourceTask(task.getId())
                             .addAllData(task.getResult().stream()
                                     .map(p -> Data.newBuilder()
                                             .setKey(p.getValue0())

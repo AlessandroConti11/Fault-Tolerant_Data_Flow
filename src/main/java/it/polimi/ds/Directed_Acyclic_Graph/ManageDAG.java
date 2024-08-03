@@ -97,10 +97,10 @@ public class ManageDAG {
 
         @Override
         public String toString() {
-            return "Computation{fragments_received:" + fragments_received 
-                   + ", current_checkpoint_group:" + current_checkpoint_group
-                   + ", last_checkpoint_group:" + last_checkpoint_group
-                   + "}";
+            return "Computation{fragments_received:" + fragments_received
+                    + ", current_checkpoint_group:" + current_checkpoint_group
+                    + ", last_checkpoint_group:" + last_checkpoint_group
+                    + "}";
         }
     }
 
@@ -564,9 +564,13 @@ public class ManageDAG {
     public void saveCheckpoint(CheckpointRequest checkpointRequest) {
         var comp = running_computations.get(checkpointRequest.getComputationId());
 
-        assert comp.last_checkpoint_group != groupFromTask(checkpointRequest.getSourceTaskId()).get() : "Got checkpoint from unexpected source";
-        /// TODO: assert that this comes from a repeated computation somehow
-        if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId())) return;
+        assert comp.last_checkpoint_group != groupFromTask(checkpointRequest.getSourceTaskId()).get()
+                : "Got checkpoint from unexpected source expect: " + comp.last_checkpoint_group + " got: "
+                  + groupFromTask(checkpointRequest.getSourceTaskId());
+
+        /// TODO: assert that this comes from a repeated computation
+        if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
+            return;
 
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
         comp.fragments_received.add(checkpointRequest.getSourceTaskId());
