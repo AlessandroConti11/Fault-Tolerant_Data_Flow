@@ -197,7 +197,7 @@ public class Coordinator {
                         .setComputationId(comp_id)
                         .setSourceRole(Role.MANAGER)
                         .setTaskId(t)
-                        .setSrcTask(-1);
+                        .setSourceTask(-1);
                 if (checkpoint != -1) {
                     req.setCrashedGroup(checkpoint);
                 }
@@ -273,6 +273,7 @@ public class Coordinator {
 
                         assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
                         if (comp_list.size() == 0) {
+                            /// TODO: Still a bug here
                             System.out.println("No running computation impacted");
                             continue;
                         }

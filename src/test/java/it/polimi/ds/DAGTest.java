@@ -231,6 +231,47 @@ public class DAGTest {
             .build();
         dag.saveCheckpoint(comp);
         dag.saveCheckpoint(comp);
+
+        { /// new scope to re-use namee
+            long crashed_id = 0;
+            var impacted_groups = dag.getGroupsOfTaskManager(crashed_id);
+            assertEquals(List.of(0L, 1L), impacted_groups);
+
+            var comp_opts = impacted_groups.stream()
+                    .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
+                    .collect(Collectors.toList());
+            assertEquals(List.of(Optional.of(0L), Optional.of(0L)), comp_opts);
+
+            var comp_list = comp_opts.stream()
+                    .flatMap(Optional::stream)
+                    .distinct()
+                    .collect(Collectors.toList());
+            assertEquals(List.of(0L), comp_list);
+            var impacted_cid = comp_list.get(0);
+            long grp = dag.getGroupOfLastCheckpoint(impacted_cid);
+            assertEquals(-1L, grp);
+        }
+
+        { /// new scope to re-use namee
+            long crashed_id = 1;
+            var impacted_groups = dag.getGroupsOfTaskManager(crashed_id);
+            assertEquals(List.of(1L, 2L), impacted_groups);
+
+            var comp_opts = impacted_groups.stream()
+                    .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
+                    .collect(Collectors.toList());
+            assertEquals(List.of(Optional.of(0L), Optional.empty()), comp_opts);
+
+            var comp_list = comp_opts.stream()
+                    .flatMap(Optional::stream)
+                    .distinct()
+                    .collect(Collectors.toList());
+            assertEquals(List.of(0L), comp_list);
+            var impacted_cid = comp_list.get(0);
+            long grp = dag.getGroupOfLastCheckpoint(impacted_cid);
+            assertEquals(-1L, grp);
+        }
+
         dag.saveCheckpoint(comp);
         assertThrowsExactly(AssertionError.class, () -> dag.saveCheckpoint(comp));
 

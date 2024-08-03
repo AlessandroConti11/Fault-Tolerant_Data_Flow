@@ -85,7 +85,7 @@ public class ManageDAG {
 
         final List<Data> init_data;
 
-        volatile int fragment_count = 0;
+        final Vector<Long> fragments_received = new Vector<>();
         long current_checkpoint_group = checkpointInterval - 1;
         DataRequest.Builder current_checkpoint = DataRequest.newBuilder();
         long last_checkpoint_group = INVALID_GROUP;
@@ -97,7 +97,7 @@ public class ManageDAG {
 
         @Override
         public String toString() {
-            return "Computation{fragment_count:" + fragment_count
+            return "Computation{fragments_received:" + fragments_received 
                    + ", current_checkpoint_group:" + current_checkpoint_group
                    + ", last_checkpoint_group:" + last_checkpoint_group
                    + "}";
@@ -564,16 +564,18 @@ public class ManageDAG {
     public void saveCheckpoint(CheckpointRequest checkpointRequest) {
         var comp = running_computations.get(checkpointRequest.getComputationId());
 
-        assert comp.last_checkpoint_group != checkpointRequest.getGroupId() : "Got checkpoint from unexpected source";
+        assert comp.last_checkpoint_group != groupFromTask(checkpointRequest.getSourceTaskId()).get() : "Got checkpoint from unexpected source";
+        /// TODO: assert that this comes from a repeated computation somehow
+        if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId())) return;
 
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
-        comp.fragment_count += 1;
+        comp.fragments_received.add(checkpointRequest.getSourceTaskId());
 
-        if (comp.fragment_count == maxTasksPerGroup) {
+        if (comp.fragments_received.size() == maxTasksPerGroup) {
             comp.last_checkpoint = comp.current_checkpoint;
             comp.last_checkpoint_group = comp.current_checkpoint_group;
             comp.current_checkpoint_group += checkpointInterval;
-            comp.fragment_count = 0;
+            comp.fragments_received.clear();
         }
     }
 

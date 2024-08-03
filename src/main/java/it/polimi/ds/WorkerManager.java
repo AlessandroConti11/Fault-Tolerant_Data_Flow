@@ -177,7 +177,7 @@ public class WorkerManager {
 
                     var req = requests.get((int) (next_task_id % task.getGroupSize()))
                             .setSourceRole(Role.WORKER)
-                            .setSrcTask(task.getId())
+                            .setSourceTask(task.getId())
                             .setComputationId(task.getComputationId())
                             .setTaskId(next_task_id).build();
                     try {
@@ -203,6 +203,7 @@ public class WorkerManager {
             node.send(WorkerManagerRequest.newBuilder()
                     .setCheckpointRequest(CheckpointRequest.newBuilder()
                             .setComputationId(task.getComputationId())
+                            .setSourceTaskId(task.getId())
                             .addAllData(task.getResult().stream()
                                     .map(p -> Data.newBuilder()
                                             .setKey(p.getValue0())

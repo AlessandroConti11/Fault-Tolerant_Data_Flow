@@ -74,7 +74,7 @@ class Task {
     }
 
     public void addData(DataRequest req) {
-        if (received_data_from.contains(req.getSrcTask()))
+        if (received_data_from.contains(req.getSourceTask()))
             return;
 
         assert has_all_data == false;
@@ -82,9 +82,9 @@ class Task {
 
         if (data_count == 0)
             current_computation_id = req.getComputationId();
-        assert current_computation_id == req.getComputationId();
+        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: " + req.getComputationId();
 
-        received_data_from.add(req.getSrcTask());
+        received_data_from.add(req.getSourceTask());
         this.data.addAll(req.getDataList());
         if (req.getSourceRole() == Role.MANAGER) {
             data_count = group_size;
@@ -106,7 +106,7 @@ class Task {
     }
 
     public void restartFromCheckpoint(DataRequest req) {
-        if (received_data_from.contains(req.getSrcTask()))
+        if (received_data_from.contains(req.getSourceTask()))
             return;
 
         if (!hasAlreadyComputed()) {
