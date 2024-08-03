@@ -19,7 +19,7 @@ public class Allocator {
         ProcessBuilder process_builder = new ProcessBuilder("mvn")
                 .redirectErrorStream(true);
 
-        System.out.println("Server is running on " + Address.getOwnAddress().toString());
+        System.out.println("Server is running on " + Address.getOwnAddress().withPort(PORT).toString());
 
         while (true) {
             Node conn = new Node(listener.accept());

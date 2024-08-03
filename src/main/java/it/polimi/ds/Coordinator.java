@@ -121,6 +121,13 @@ public class Coordinator {
                     .collect(Collectors.toList());
 
             allocateResources(dag.getNumberOfTaskManager());
+            /// Wait until all the workers are ready, then, once we have collected all the
+            /// network information, notify the WorkerManagers of all the others' addresses
+            waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+            workers.forEach((k, v) -> {
+                v.notifyNetworkChange();
+            });
+
             System.out.println("Allocated resources");
             waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
             System.out.println("Workers ready");
@@ -183,9 +190,10 @@ public class Coordinator {
     }
 
     public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id, long checkpoint) {
+        assert data.size() == dag.getMaxTasksPerGroup() : "Tried to send the wrong type of request";
         dag.getTasksOfGroup(group_id).parallelStream().forEach(t -> {
             try {
-                var req = data.get((int) (long) t)
+                var req = data.get((int) (long) t % dag.getMaxTasksPerGroup())
                         .setComputationId(comp_id)
                         .setSourceRole(Role.MANAGER)
                         .setTaskId(t)
@@ -223,10 +231,13 @@ public class Coordinator {
     Thread heartbeat = new Thread(() -> {
         Object lock = new Object();
         try {
+            List<Long> crashed = new Vector<>();
+            List<Long> allocated = new Vector<>();
+            int remaining;
+
             while (true) {
-                List<Long> crashed = new Vector<>();
-                for (var worker : workers.entrySet()) {
-                    synchronized (lock) {
+                synchronized (lock) {
+                    for (var worker : workers.entrySet()) {
                         boolean alive = worker.getValue().checkAlive();
                         if (!alive) {
                             dag.addFreeTaskManager((int) (long) worker.getKey());
@@ -234,21 +245,31 @@ public class Coordinator {
                             crashed.add(worker.getKey());
                         }
                     }
-
+                    remaining = workers.size();
                 }
 
                 if (crashed.size() > 0) {
+                    System.out.println("Trying to allocate " + crashed.size());
                     allocateResources(crashed.size());
-                    waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+                    /// Wait until all the workers are ready, then, once we have collected all the
+                    /// network information, notify the WorkerManagers of all the others' addresses
+                    waitUntilAllWorkersAreReady(remaining + crashed.size());
+                    workers.forEach((k, v) -> {
+                        v.notifyNetworkChange();
+                    });
+
+                    allocated.addAll(crashed);
+                    crashed.clear();
+                    waitUntilAllWorkersAreReady(remaining + allocated.size());
                     System.out.println("Network ready");
 
-                    for (long tm_id : crashed) {
+                    for (long tm_id : allocated) {
                         List<Long> impacted_groups = dag.getGroupsOfTaskManager(tm_id);
                         var comp_list = impacted_groups.stream()
                                 .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
                                 .flatMap(Optional::stream)
-                            .distinct()
-                            .collect(Collectors.toList());
+                                .distinct()
+                                .collect(Collectors.toList());
 
                         assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
                         if (comp_list.size() == 0) {
@@ -267,8 +288,10 @@ public class Coordinator {
                             sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
                         }
                     }
+                    allocated.clear();
                 }
             }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -348,6 +371,7 @@ public class Coordinator {
             var operations = dag.getOperationsForTaskManager(id);
 
             System.out.println("max task" + dag.getMaxTasksPerGroup());
+            System.out.println("ID " + id);
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
                     .addAllTasks(tasks.stream()
@@ -434,6 +458,7 @@ public class Coordinator {
                         if (req.hasCheckpointRequest()) {
                             assert is_checkpoint : "Got a writeback form a non-checkpoint manager";
 
+                            /// TODO: There is some bug with last_checkpoint_group where comp is null
                             dag.saveCheckpoint(req.getCheckpointRequest());
                         } else if (req.hasResult()) {
                             assert is_last : "Got a writeback from a non-last manager";
@@ -481,13 +506,6 @@ public class Coordinator {
                 .build());
 
         var resp = h.receive(AllocateNodeManagerResponse.class);
-
-        /// Wait until all the workers are ready, then, once we have collected all the
-        /// network information, notify the WorkerManagers of all the others' addresses
-        waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
-        workers.forEach((k, v) -> {
-            v.notifyNetworkChange();
-        });
     }
 
     void waitUntilAllWorkersAreReady(int requestedWorkers) {
