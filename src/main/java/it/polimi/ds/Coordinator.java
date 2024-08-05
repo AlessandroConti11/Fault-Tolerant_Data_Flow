@@ -321,7 +321,7 @@ public class Coordinator {
                             assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
                             if (comp_list.size() == 0) {
                                 /// TODO: Still a bug here
-                                System.out.println("No running computation impacted");
+                                System.out.println("No running computation impacted " + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
                                 continue;
                             }
 

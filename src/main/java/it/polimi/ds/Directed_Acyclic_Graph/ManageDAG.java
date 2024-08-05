@@ -188,6 +188,10 @@ public class ManageDAG {
         return ret;
     }
 
+    public Map<Long, Computation> getComputations() {
+        return running_computations;
+    }
+
     public void finishComputation(long computation_id) {
         running_computations.remove(computation_id);
     }
@@ -566,7 +570,7 @@ public class ManageDAG {
         assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId() + " should exist. Got " + running_computations;
         var grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
-        assert comp.fragments_received.size() != maxTasksPerGroup : "Received request for a finished checkpoint";
+        assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint";
         assert grp == comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
                 + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
@@ -599,7 +603,7 @@ public class ManageDAG {
 
     public Optional<Long> getCurrentComputationOfGroup(long group_id) {
         var computations = running_computations.values().stream()
-                .filter(comp -> comp.last_checkpoint_group < group_id && comp.current_checkpoint_group >= group_id)
+                .filter(comp -> comp.last_checkpoint_group <= group_id && comp.current_checkpoint_group >= group_id)
                 .collect(Collectors.toList());
         assert computations.size() <= 1 : "Somehow there are 2 overlapping computations";
 

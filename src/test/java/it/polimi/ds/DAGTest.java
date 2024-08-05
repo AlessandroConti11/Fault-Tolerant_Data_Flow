@@ -224,13 +224,18 @@ public class DAGTest {
             assertEquals(-1L, grp);
         }
 
-        var comp = CheckpointRequest.newBuilder()
-            .addData(Data.newBuilder().setKey(0).setValue(0).build())
-            .setComputationId(comp_id)
-            .setGroupId(1L)
-            .build();
-        dag.saveCheckpoint(comp);
-        dag.saveCheckpoint(comp);
+        var comps = dag.getTasksOfGroup(1L).stream().map(t -> CheckpointRequest.newBuilder()
+                .addData(Data.newBuilder().setKey(0).setValue(0).build())
+                .setComputationId(comp_id)
+                .setSourceTaskId(t)
+                .build()).collect(Collectors.toList());
+
+        dag.saveCheckpoint(comps.get(0));
+        dag.saveCheckpoint(comps.get(0));
+        dag.saveCheckpoint(comps.get(0));
+        /// The same checkpoints don't get counted twice
+        assertDoesNotThrow(() -> dag.saveCheckpoint(comps.get(0)));
+        dag.saveCheckpoint(comps.get(1));
 
         { /// new scope to re-use namee
             long crashed_id = 0;
@@ -272,8 +277,9 @@ public class DAGTest {
             assertEquals(-1L, grp);
         }
 
-        dag.saveCheckpoint(comp);
-        assertThrowsExactly(AssertionError.class, () -> dag.saveCheckpoint(comp));
+        dag.saveCheckpoint(comps.get(2));
+        assertThrowsExactly(AssertionError.class,
+                () -> dag.saveCheckpoint(CheckpointRequest.newBuilder(comps.get(0)).setSourceTaskId(3).build()));
 
         { /// new scope to re-use namee
             long crashed_id = 0;
@@ -283,13 +289,13 @@ public class DAGTest {
             var comp_opts = impacted_groups.stream()
                     .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
                     .collect(Collectors.toList());
-            assertEquals(List.of(Optional.empty(), Optional.empty()), comp_opts);
+            assertEquals(List.of(Optional.empty(), Optional.of(0L)), comp_opts);
 
             var comp_list = comp_opts.stream()
                     .flatMap(Optional::stream)
                     .distinct()
                     .collect(Collectors.toList());
-            assertEquals(List.of(), comp_list);
+            assertEquals(List.of(0L), comp_list);
         }
 
         { /// new scope to re-use namee
@@ -300,7 +306,7 @@ public class DAGTest {
             var comp_opts = impacted_groups.stream()
                     .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
                     .collect(Collectors.toList());
-            assertEquals(List.of(Optional.empty(), Optional.of(0L)), comp_opts);
+            assertEquals(List.of(Optional.of(0L), Optional.of(0L)), comp_opts);
 
             var comp_list = comp_opts.stream()
                     .flatMap(Optional::stream)

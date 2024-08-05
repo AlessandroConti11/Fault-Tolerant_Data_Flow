@@ -82,7 +82,7 @@ class Task {
 
         if (data_count == 0)
             current_computation_id = req.getComputationId();
-        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: " + req.getComputationId();
+        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: " + req.getComputationId() + " task " + getId();
 
         received_data_from.add(req.getSourceTask());
         this.data.addAll(req.getDataList());
