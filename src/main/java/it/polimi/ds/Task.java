@@ -73,7 +73,7 @@ class Task {
         already_computed = false;
     }
 
-    public void addData(DataRequest req) {
+    public synchronized void addData(DataRequest req) {
         if (received_data_from.contains(req.getSourceTask()))
             return;
 

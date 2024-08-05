@@ -12,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
@@ -56,6 +58,7 @@ public class Coordinator {
     private ResultBuilder result_builder;
 
     private ManageDAG dag = null;
+    private AtomicLong just_connected = new AtomicLong(0);
 
     public Coordinator() {
     }
@@ -123,13 +126,12 @@ public class Coordinator {
             allocateResources(dag.getNumberOfTaskManager());
             /// Wait until all the workers are ready, then, once we have collected all the
             /// network information, notify the WorkerManagers of all the others' addresses
-            waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
             workers.forEach((k, v) -> {
                 v.notifyNetworkChange();
             });
 
             System.out.println("Allocated resources");
-            waitUntilAllWorkersAreReady(dag.getNumberOfTaskManager());
+            waitAllocatedWorkers(dag.getNumberOfTaskManager());
             System.out.println("Workers ready");
 
             /// Send back the OK to the client, this will signal that the network is ready
@@ -201,8 +203,24 @@ public class Coordinator {
                 if (checkpoint != -1) {
                     req.setCrashedGroup(checkpoint);
                 }
-                workers.get(dag.getManagerOfTask((long) t).get())
-                        .send(req.build());
+                try {
+                    workers.get(dag.getManagerOfTask((long) t).get())
+                            .send(req.build());
+                } catch (Exception ee) {
+                    synchronized(workers) {
+                        try {
+							workers.wait();
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+                    }
+                    var w = workers.get(dag.getManagerOfTask((long) t).get());
+                    assert w != null : "workers: " + workers.keySet() + " manager: "
+                                       + dag.getManagerOfTask((long) t).get() + "task: " + t;
+
+                    w.send(req.build());
+                }
+
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -218,8 +236,12 @@ public class Coordinator {
                 Node node = new Node(workerListener.accept());
                 long id = dag.getNextFreeTaskManager().orElseThrow(); // TODO: Handle this case, in theory it should
                                                                       // never happen, but you never know. This happens
-                                                                      // when we initialize to many workerManagers
+                                                                      // when we initialize to many workerManagers //
                                                                       // somehow
+                just_connected.addAndGet(1);
+                synchronized (just_connected) {
+                    just_connected.notifyAll();
+                }
                 workers.put(id, new WorkerManagerHandler(node, id));
                 executors.submit(workers.get(id));
             }
@@ -230,10 +252,11 @@ public class Coordinator {
 
     Thread heartbeat = new Thread(() -> {
         Object lock = new Object();
+        ExecutorService hb_executor = Executors.newSingleThreadExecutor();
+        Future<Boolean> alloc_future = null;
         try {
             List<Long> crashed = new Vector<>();
             List<Long> allocated = new Vector<>();
-            int remaining;
 
             while (true) {
                 synchronized (lock) {
@@ -245,51 +268,77 @@ public class Coordinator {
                             crashed.add(worker.getKey());
                         }
                     }
-                    remaining = workers.size();
                 }
 
                 if (crashed.size() > 0) {
                     System.out.println("Trying to allocate " + crashed.size());
                     allocateResources(crashed.size());
+                    System.out.println("Allocated");
                     /// Wait until all the workers are ready, then, once we have collected all the
                     /// network information, notify the WorkerManagers of all the others' addresses
-                    waitUntilAllWorkersAreReady(remaining + crashed.size());
                     workers.forEach((k, v) -> {
                         v.notifyNetworkChange();
                     });
 
                     allocated.addAll(crashed);
                     crashed.clear();
-                    waitUntilAllWorkersAreReady(remaining + allocated.size());
-                    System.out.println("Network ready");
+                }
 
-                    for (long tm_id : allocated) {
-                        List<Long> impacted_groups = dag.getGroupsOfTaskManager(tm_id);
-                        var comp_list = impacted_groups.stream()
-                                .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
-                                .flatMap(Optional::stream)
-                                .distinct()
-                                .collect(Collectors.toList());
+                if (allocated.size() > 0) {
+                    if (alloc_future == null) {
+                        alloc_future = hb_executor.submit(() -> {
+                            waitAllocatedWorkers(dag.getNumberOfTaskManager());
+                            System.out.println("Network ready");
 
-                        assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
-                        if (comp_list.size() == 0) {
-                            /// TODO: Still a bug here
-                            System.out.println("No running computation impacted");
-                            continue;
+                            synchronized(workers) {
+                                /// Let go of all the locks that are waiting for the network to be ready
+                                workers.notifyAll();
+                            }
+                            return true;
+                        });
+                    } else if (alloc_future != null && alloc_future.state() == Future.State.RUNNING) {
+                        int ready = workers.entrySet().stream()
+                                .map(e -> e.getValue())
+                                .mapToInt(e -> e.isReady() ? 1 : 0)
+                                .sum();
+                        System.out.println("Still waiting " + dag.getNumberOfTaskManager() + " got " + ready);
+
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
                         }
+                        continue;
+                    } else if (alloc_future.isDone()) {
+                        for (long tm_id : allocated) {
+                            List<Long> impacted_groups = dag.getGroupsOfTaskManager(tm_id);
+                            var comp_list = impacted_groups.stream()
+                                    .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
+                                    .flatMap(Optional::stream)
+                                    .distinct()
+                                    .collect(Collectors.toList());
 
-                        var comp_id = comp_list.get(0);
+                            assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
+                            if (comp_list.size() == 0) {
+                                /// TODO: Still a bug here
+                                System.out.println("No running computation impacted");
+                                continue;
+                            }
 
-                        System.out.println("Sending checkpoint");
-                        long grp = dag.getGroupOfLastCheckpoint(comp_id);
-                        if (grp == -1) {
-                            var data = dag.getDataRequestsForGroup(comp_id, 0);
-                            sendComputation(data, 0, comp_id, grp);
-                        } else {
-                            sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
+                            var comp_id = comp_list.get(0);
+
+                            System.out.println("Sending checkpoint");
+                            long grp = dag.getGroupOfLastCheckpoint(comp_id);
+                            if (grp == -1) {
+                                var data = dag.getDataRequestsForGroup(comp_id, 0);
+                                sendComputation(data, 0, comp_id, grp);
+                            } else {
+                                sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
+                            }
                         }
+                        allocated.clear();
+                        alloc_future = null;
                     }
-                    allocated.clear();
                 }
             }
 
@@ -312,12 +361,13 @@ public class Coordinator {
         public synchronized void addData(DataResponse r) {
             assert resp_aggregator.getComputationId() == r.getComputationId()
                     : "Getting results for a different computation " + r.getComputationId() + " want: "
-                      + resp_aggregator.getComputationId();
+                            + resp_aggregator.getComputationId();
 
             assert fragments.size() < max_data_count : "A computation is still going after it has finished";
 
             /// TODO: assert that this comes from a repeated computation somehow
-            if (fragments.contains(r.getSourceTask())) return;
+            if (fragments.contains(r.getSourceTask()))
+                return;
 
             resp_aggregator.addAllData(r.getDataList());
             fragments.add(r.getSourceTask());
@@ -463,6 +513,8 @@ public class Coordinator {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
                             assert is_checkpoint : "Got a writeback form a non-checkpoint manager";
+                            assert dag.groupFromTask(req.getCheckpointRequest().getSourceTaskId()).get() < dag
+                                    .getNumberOfGroups() : "Checkpoint doesn't make sense to be the last group";
 
                             /// TODO: There is some bug with last_checkpoint_group where comp is null
                             dag.saveCheckpoint(req.getCheckpointRequest());
@@ -512,9 +564,20 @@ public class Coordinator {
                 .build());
 
         var resp = h.receive(AllocateNodeManagerResponse.class);
+        while (just_connected.getAcquire() < requestedWorkers) {
+            try {
+                synchronized (just_connected) {
+                    just_connected.wait();
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        just_connected.addAndGet(-requestedWorkers);
     }
 
-    void waitUntilAllWorkersAreReady(int requestedWorkers) {
+    void waitAllocatedWorkers(int requestedWorkers) {
         int ready = workers.entrySet().stream()
                 .map(e -> e.getValue())
                 .mapToInt(e -> e.isReady() ? 1 : 0)

@@ -245,7 +245,7 @@ public class ManageDAG {
     }
 
     public boolean isCheckpoint(long groupId) {
-        return (groupId % checkpointInterval) == checkpointInterval - 1;
+        return groupId < getNumberOfGroups() && (groupId % checkpointInterval) == checkpointInterval - 1;
     }
 
     public List<DataRequest.Builder> getLastCheckpoint(long computation_id) {
@@ -563,10 +563,12 @@ public class ManageDAG {
      */
     public void saveCheckpoint(CheckpointRequest checkpointRequest) {
         var comp = running_computations.get(checkpointRequest.getComputationId());
+        assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId() + " should exist. Got " + running_computations;
+        var grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
-        assert comp.last_checkpoint_group != groupFromTask(checkpointRequest.getSourceTaskId()).get()
-                : "Got checkpoint from unexpected source expect: " + comp.last_checkpoint_group + " got: "
-                  + groupFromTask(checkpointRequest.getSourceTaskId());
+        assert comp.fragments_received.size() != maxTasksPerGroup : "Received request for a finished checkpoint";
+        assert grp == comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
+                + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
         /// TODO: assert that this comes from a repeated computation
         if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))

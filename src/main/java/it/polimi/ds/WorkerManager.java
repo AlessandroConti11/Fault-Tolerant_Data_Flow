@@ -138,63 +138,77 @@ public class WorkerManager {
         task.waitForData();
         FaultyThread.maybeCrash();
 
-        if (!task.hasAlreadyComputed()) {
-            /// Now the task has all the data, we can execute it
-            task.execute();
-        }
+        synchronized (task) {
+            if (!task.hasAlreadyComputed()) {
+                /// Now the task has all the data, we can execute it
+                task.execute();
+            }
 
-        /// TODO: successors are not passed properly, idk why. <- Maybe outdated
-        var successors = task.getSuccessorMap();
-        /// Send back to the coordinator if there is nothing more to do
-        if (successors.isEmpty()) {
-            writeBackResult(coordinator, task);
-            return;
-        }
-
-        /// Otherwise send to the next in group
-        List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
-
-        /// Assert that we have only one group as a successors
-        assert successors.entrySet().stream().map(e -> e.getValue().size()).reduce(0,
-                (sum, val) -> sum + val) == group_size
-                : "Aggregated number of successors doesn't match group size: " + group_size;
-
-        successors.keySet().parallelStream().forEach(successor_id -> {
-            var successor = network_nodes.get(successor_id);
-            if (successor == null) {
-                System.out.println("ERROR: Successor not found");
+            /// TODO: successors are not passed properly, idk why. <- Maybe outdated
+            var successors = task.getSuccessorMap();
+            /// Send back to the coordinator if there is nothing more to do
+            if (successors.isEmpty()) {
+                writeBackResult(coordinator, task);
                 return;
             }
 
-            System.out.println("Sending task to " + successor_id);
+            /// Otherwise send to the next in group
+            List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
 
-            try {
-                Node conn = new Node(successor);
-                System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
+            /// Assert that we have only one group as a successors
+            assert successors.entrySet().stream().map(e -> e.getValue().size()).reduce(0,
+                    (sum, val) -> sum + val) == group_size
+                    : "Aggregated number of successors doesn't match group size: " + group_size;
 
-                successors.get(successor_id).stream().forEach(next_task_id -> {
-                    assert task.getId() < next_task_id : "Task id is in successors group";
-
-                    var req = requests.get((int) (next_task_id % task.getGroupSize()))
-                            .setSourceRole(Role.WORKER)
-                            .setSourceTask(task.getId())
-                            .setComputationId(task.getComputationId())
-                            .setTaskId(next_task_id).build();
-                    try {
-                        conn.send(req);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                });
-                conn.close();
-
-                if (task.isCheckpoint()) {
-                    writeBackCheckpoint(coordinator, task);
+            successors.keySet().parallelStream().forEach(successor_id -> {
+                var successor = network_nodes.get(successor_id);
+                if (successor == null) {
+                    System.out.println("ERROR: Successor not found");
+                    return;
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+
+                System.out.println("Sending task to " + successor_id);
+
+                while (true) {
+                    try {
+                        Node conn = new Node(successor);
+                        System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
+
+                        successors.get(successor_id).stream().forEach(next_task_id -> {
+                            assert task.getId() < next_task_id : "Task id is in successors group";
+
+                            var req = requests.get((int) (next_task_id % task.getGroupSize()))
+                                    .setSourceRole(Role.WORKER)
+                                    .setSourceTask(task.getId())
+                                    .setComputationId(task.getComputationId())
+                                    .setTaskId(next_task_id).build();
+                            try {
+                                conn.send(req);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
+                        conn.close();
+
+                        if (task.isCheckpoint()) {
+                            writeBackCheckpoint(coordinator, task);
+                        }
+
+                        break;
+                    } catch (IOException e) {
+                        System.out.println("A successor is not available");
+                        synchronized (network_nodes) {
+                            try {
+                                network_nodes.wait();
+                            } catch (InterruptedException e1) {
+                                e1.printStackTrace();
+                            }
+                        }
+                    }
+                }
+            });
+
+        }
     }
 
     public void writeBackCheckpoint(Node node, Task task) {
@@ -255,20 +269,25 @@ public class WorkerManager {
             }
 
             assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle";
-            var network_change = req.getUpdateNetworkRequest();
+            synchronized (network_nodes) {
+                var network_change = req.getUpdateNetworkRequest();
 
-            var nodes = network_change.getAddressesList();
-            var ids = network_change.getTaskManagerIdsList();
-            for (int i = 0; i < nodes.size(); i++) {
-                network_nodes.put(ids.get(i), new Address(nodes.get(i)));
-            }
+                var nodes = network_change.getAddressesList();
+                var ids = network_change.getTaskManagerIdsList();
+                for (int i = 0; i < nodes.size(); i++) {
+                    network_nodes.put(ids.get(i), new Address(nodes.get(i)));
+                }
 
-            System.out.println("Network updated");
+                System.out.println("Network updated");
 
-            try {
-                coordinator.send(UpdateNetworkResponse.newBuilder().build());
-            } catch (IOException e) {
-                // UNREACHABLE, coordinator is reliable
+                try {
+                    coordinator.send(UpdateNetworkResponse.newBuilder().build());
+                } catch (IOException e) {
+                    // UNREACHABLE, coordinator is reliable
+                }
+
+                /// If a successor crashes, the other thread will wait, so we just unlock it
+                network_nodes.notifyAll();
             }
 
             System.out.println("network " + network_nodes);
@@ -304,6 +323,8 @@ public class WorkerManager {
                                     : "Got message from unexpected source";
 
                             Task t = getTask(req.getTaskId());
+                            assert t != null : "Unknown task id expected: " + tasks + " got: " + req.getTaskId();
+
                             if (!req.hasCrashedGroup()) {
                                 t.addData(req);
                             } else {
