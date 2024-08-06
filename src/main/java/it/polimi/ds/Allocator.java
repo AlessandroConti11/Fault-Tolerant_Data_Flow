@@ -30,7 +30,6 @@ public class Allocator {
                 try {
                     var req = conn.receive(AllocateNodeManagerRequest.class);
                     if (req.hasCoordinator() && req.getCoordinator() == true) {
-                        System.out.println("Coordinator");
 
                         Process proc = process_builder
                                 .command("java", "-ea", "-jar", "target/coordinator.jar")
@@ -74,15 +73,23 @@ public class Allocator {
 
     }
 
+    public static final String WM_MESSAGE_PREFIX = "WMID";
     static void spoofOutput(Process p, String prefix) {
         new Thread(() -> {
+            String pr = prefix;
             try {
                 BufferedReader reader = new BufferedReader(
                         new InputStreamReader(p.getInputStream()));
 
                 String line = reader.readLine();
                 while (line != null) {
-                    System.out.println(prefix + line);
+                    if (line.startsWith(WM_MESSAGE_PREFIX)) {
+                        String id = line.substring(WM_MESSAGE_PREFIX.length());
+                        pr = pr.replace(")", ", " + id + ")");
+                        line = reader.readLine();
+                        continue;
+                    }
+                    System.out.println(pr + line);
                     line = reader.readLine();
                 }
 

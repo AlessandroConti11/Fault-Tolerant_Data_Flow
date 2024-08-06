@@ -99,6 +99,9 @@ public class WorkerManager {
 
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
+
+        System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
+
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
         System.out.println("grp size" + group_size);
