@@ -207,16 +207,16 @@ public class Coordinator {
                     workers.get(dag.getManagerOfTask((long) t).get())
                             .send(req.build());
                 } catch (Exception ee) {
-                    synchronized(workers) {
+                    synchronized (workers) {
                         try {
-							workers.wait();
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
+                            workers.wait();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     }
                     var w = workers.get(dag.getManagerOfTask((long) t).get());
                     assert w != null : "workers: " + workers.keySet() + " manager: "
-                                       + dag.getManagerOfTask((long) t).get() + "task: " + t;
+                            + dag.getManagerOfTask((long) t).get() + "task: " + t;
 
                     w.send(req.build());
                 }
@@ -227,8 +227,8 @@ public class Coordinator {
         });
     }
 
+    private final ExecutorService exe = Executors.newCachedThreadPool();
     Thread workerListener = new Thread(() -> {
-        ExecutorService executors = Executors.newCachedThreadPool();
 
         try {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
@@ -243,7 +243,7 @@ public class Coordinator {
                     just_connected.notifyAll();
                 }
                 workers.put(id, new WorkerManagerHandler(node, id));
-                executors.submit(workers.get(id));
+                exe.submit(workers.get(id));
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -290,7 +290,7 @@ public class Coordinator {
                             waitAllocatedWorkers(dag.getNumberOfTaskManager());
                             System.out.println("Network ready");
 
-                            synchronized(workers) {
+                            synchronized (workers) {
                                 /// Let go of all the locks that are waiting for the network to be ready
                                 workers.notifyAll();
                             }
@@ -301,7 +301,8 @@ public class Coordinator {
                                 .map(e -> e.getValue())
                                 .mapToInt(e -> e.isReady() ? 1 : 0)
                                 .sum();
-                        System.out.println("Still waiting " + dag.getNumberOfTaskManager() + " got " + ready);
+                        System.out.println("Still waiting " + dag.getNumberOfTaskManager() + " got " + ready + " size: "
+                                + workers.size());
 
                         try {
                             Thread.sleep(1000);
@@ -321,7 +322,8 @@ public class Coordinator {
                             assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
                             if (comp_list.size() == 0) {
                                 /// TODO: Still a bug here
-                                System.out.println("No running computation impacted " + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
+                                System.out.println("No running computation impacted "
+                                        + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
                                 continue;
                             }
 
@@ -517,16 +519,17 @@ public class Coordinator {
                                     .getNumberOfGroups() : "Checkpoint doesn't make sense to be the last group";
 
                             /// TODO: There is some bug with last_checkpoint_group where comp is null
-                            dag.saveCheckpoint(req.getCheckpointRequest());
+                            exe.submit(() -> dag.saveCheckpoint(req.getCheckpointRequest()));
                         } else if (req.hasResult()) {
                             assert is_last : "Got a writeback from a non-last manager";
 
-                            result_builder.addData(req.getResult());
+                            exe.submit(() -> result_builder.addData(req.getResult()));
                         } else {
                             assert false : "Forgot to add the handling case for a new message";
                         }
                     } catch (SocketTimeoutException e) {
                         if (network_changed) {
+                            System.out.println("Sending update network request to " + id);
                             control_connection.send(
                                     ControlWorkerRequest
                                             .newBuilder()

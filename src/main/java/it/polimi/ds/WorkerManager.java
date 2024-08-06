@@ -271,6 +271,7 @@ public class WorkerManager {
                 System.exit(0);
             }
 
+            System.out.println("Received control request");
             assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle";
             synchronized (network_nodes) {
                 var network_change = req.getUpdateNetworkRequest();
@@ -282,13 +283,14 @@ public class WorkerManager {
                 }
 
                 System.out.println("Network updated");
+            }
+            try {
+                coordinator.send(UpdateNetworkResponse.newBuilder().build());
+            } catch (IOException e) {
+                // UNREACHABLE, coordinator is reliable
+            }
 
-                try {
-                    coordinator.send(UpdateNetworkResponse.newBuilder().build());
-                } catch (IOException e) {
-                    // UNREACHABLE, coordinator is reliable
-                }
-
+            synchronized (network_nodes) {
                 /// If a successor crashes, the other thread will wait, so we just unlock it
                 network_nodes.notifyAll();
             }
