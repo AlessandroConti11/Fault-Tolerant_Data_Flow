@@ -571,8 +571,19 @@ public class ManageDAG {
         var grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
         assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint";
-        assert grp == comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
-                + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
+        while (grp != comp.current_checkpoint_group) {
+            System.out.println("Waiting for the messages form the last checkpoint to arrive curr: " + grp + " waiting for " + comp.current_checkpoint_group);
+            synchronized (this) {
+                try {
+					this.wait();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+            }
+            grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
+        }
+        // assert grp == comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
+        //         + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
         /// TODO: assert that this comes from a repeated computation
         if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
@@ -586,6 +597,10 @@ public class ManageDAG {
             comp.last_checkpoint_group = comp.current_checkpoint_group;
             comp.current_checkpoint_group += checkpointInterval;
             comp.fragments_received.clear();
+
+            synchronized (this) {
+                this.notifyAll();
+            }
         }
     }
 
