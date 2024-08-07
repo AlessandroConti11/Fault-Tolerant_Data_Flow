@@ -80,8 +80,14 @@ class Task {
             received_data_from.put(req.getComputationId(), new Vector<Long>());
         }
 
-        if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask()))
+        if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask())) {
+            if (data_count == group_size) {
+                synchronized (this) {
+                    this.notifyAll();
+                }
+            }
             return;
+        }
 
         assert has_all_data == false;
         assert data_count < group_size;
@@ -116,8 +122,14 @@ class Task {
             /// TODO: It would be better to add all tasks to this
             received_data_from.put(req.getComputationId(), List.of(req.getSourceTask()));
         } else {
-            if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask()))
+            if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask())) {
+                if (data_count == group_size) {
+                    synchronized (this) {
+                        this.notifyAll();
+                    }
+                }
                 return;
+            }
         }
 
         if (!hasAlreadyComputed()) {
