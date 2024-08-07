@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
@@ -28,7 +30,7 @@ class Task {
     private final int group_size;
     private final ProtoComputation computation;
 
-    private List<Long> received_data_from = new Vector<>();
+    private ConcurrentMap<Long, List<Long>> received_data_from = new ConcurrentHashMap<>();
     private volatile boolean has_all_data = false;
     private int data_count = 0;
     private List<Data> data;
@@ -69,22 +71,26 @@ class Task {
         has_all_data = false;
         data_count = 0;
         data.clear();
-        received_data_from = new Vector<>();
+        // received_data_from = new Vector<>();
         already_computed = false;
     }
 
     public synchronized void addData(DataRequest req) {
-        if (received_data_from.contains(req.getSourceTask()))
+        if (!received_data_from.containsKey(req.getComputationId())) {
+            received_data_from.put(req.getComputationId(), new Vector<Long>());
+        }
+
+        if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask()))
             return;
 
         assert has_all_data == false;
         assert data_count < group_size;
 
-        if (data_count == 0)
+        if (data_count == 0) 
             current_computation_id = req.getComputationId();
-        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: " + req.getComputationId() + " task " + getId();
+        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: " + req.getComputationId() + " task " + getId() + " data " + data_count;
 
-        received_data_from.add(req.getSourceTask());
+        received_data_from.get(req.getComputationId()).add(req.getSourceTask());
         this.data.addAll(req.getDataList());
         if (req.getSourceRole() == Role.MANAGER) {
             data_count = group_size;
@@ -105,9 +111,14 @@ class Task {
         return already_computed;
     }
 
-    public void restartFromCheckpoint(DataRequest req) {
-        if (received_data_from.contains(req.getSourceTask()))
-            return;
+    public synchronized void restartFromCheckpoint(DataRequest req) {
+        if (!received_data_from.containsKey(req.getComputationId())) {
+            /// TODO: It would be better to add all tasks to this
+            received_data_from.put(req.getComputationId(), List.of(req.getSourceTask()));
+        } else {
+            if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask()))
+                return;
+        }
 
         if (!hasAlreadyComputed()) {
             assert data_count == 0;

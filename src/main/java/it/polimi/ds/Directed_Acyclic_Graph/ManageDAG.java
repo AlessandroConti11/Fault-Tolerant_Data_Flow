@@ -567,23 +567,26 @@ public class ManageDAG {
      */
     public void saveCheckpoint(CheckpointRequest checkpointRequest) {
         var comp = running_computations.get(checkpointRequest.getComputationId());
-        assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId() + " should exist. Got " + running_computations;
+        assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId()
+                + " should exist. Got " + running_computations;
         var grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
         assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint";
+        assert grp <= comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
+                + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
+
         while (grp != comp.current_checkpoint_group) {
-            System.out.println("Waiting for the messages form the last checkpoint to arrive curr: " + grp + " waiting for " + comp.current_checkpoint_group);
+            System.out.println("Waiting for the messages form the last checkpoint to arrive curr: " + grp
+                    + " waiting for " + comp.current_checkpoint_group);
             synchronized (this) {
                 try {
-					this.wait();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
+                    this.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
             grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
         }
-        // assert grp == comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
-        //         + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
         /// TODO: assert that this comes from a repeated computation
         if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))

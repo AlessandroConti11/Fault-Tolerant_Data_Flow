@@ -511,6 +511,7 @@ public class Coordinator {
 
             try {
                 while (alive) {
+                    System.out.println("-----Contorl thread " + id);
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
