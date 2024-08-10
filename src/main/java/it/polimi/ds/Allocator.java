@@ -15,62 +15,64 @@ public class Allocator {
     public static int procCounter = 0;
 
     public static void main(String[] args) throws IOException {
-        ServerSocket listener = new ServerSocket(PORT);
-        ProcessBuilder process_builder = new ProcessBuilder("mvn")
-                .redirectErrorStream(true);
+        try (ServerSocket listener = new ServerSocket(PORT)) {
+            ProcessBuilder process_builder = new ProcessBuilder("mvn")
+                    .redirectErrorStream(true);
 
-        System.out.println("Server is running on " + Address.getOwnAddress().withPort(PORT).toString());
+            System.out.println("Server is running on " + Address.getOwnAddress().withPort(PORT).toString());
 
-        while (true) {
-            Node conn = new Node(listener.accept());
-            procCounter++;
-            int procId = procCounter;
+            while (true) {
+                Node conn = new Node(listener.accept());
+                procCounter++;
+                int procId = procCounter;
 
-            new Thread(() -> {
-                try {
-                    var req = conn.receive(AllocateNodeManagerRequest.class);
-                    if (req.hasCoordinator() && req.getCoordinator() == true) {
+                new Thread(() -> {
+                    try {
+                        var req = conn.receive(AllocateNodeManagerRequest.class);
+                        if (req.hasCoordinator() && req.getCoordinator() == true) {
 
-                        Process proc = process_builder
-                                .command("java", "-ea", "-jar", "target/coordinator.jar")
-                                .redirectOutput(ProcessBuilder.Redirect.PIPE)
-                                .start();
-
-                        BufferedReader reader = new BufferedReader(
-                                new InputStreamReader(proc.getInputStream()));
-
-                        String line = reader.readLine();
-                        Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
-
-                        conn.send(AllocateNodeManagerResponse.newBuilder()
-                                .setAddress(coord_addr.toProto())
-                                .build());
-
-                        spoofOutput(proc,
-                                "[" + colors[procId % colors.length] + "COORDINATOR(" + procId + ")" + RESET + "] ");
-                    } else if (req.hasNodeManagerInfo()) {
-                        NodeManagerInfo info = req.getNodeManagerInfo();
-                        for (int i = 0; i < info.getNumContainers(); i++) {
                             Process proc = process_builder
-                                    .command("java", "-ea", "-jar", "target/workers.jar",
-                                            new Address(info.getAddress()).toString())
+                                    .command("java", "-ea", "-jar", "target/coordinator.jar")
                                     .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                     .start();
 
+                            BufferedReader reader = new BufferedReader(
+                                    new InputStreamReader(proc.getInputStream()));
+
+                            String line = reader.readLine();
+                            Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
+
+                            conn.send(AllocateNodeManagerResponse.newBuilder()
+                                    .setAddress(coord_addr.toProto())
+                                    .build());
+
                             spoofOutput(proc,
-                                    "[" + colors[(procId + i) % colors.length] + "WORKER(" + (procId + i) + ")" + RESET
-                                            + "] ");
+                                    "[" + colors[procId % colors.length] + "COORDINATOR(" + procId + ")" + RESET + "] ");
+                        } else if (req.hasNodeManagerInfo()) {
+                            NodeManagerInfo info = req.getNodeManagerInfo();
+                            for (int i = 0; i < info.getNumContainers(); i++) {
+                                Process proc = process_builder
+                                        .command("java", "-ea", "-jar", "target/workers.jar",
+                                                new Address(info.getAddress()).toString())
+                                        .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                                        .start();
+
+                                spoofOutput(proc,
+                                        "[" + colors[(procId + i) % colors.length] + "WORKER(" + (procId + i) + ")" + RESET
+                                                + "] ");
+                            }
+
+                            conn.send(AllocateNodeManagerResponse.newBuilder().build());
                         }
 
-                        conn.send(AllocateNodeManagerResponse.newBuilder().build());
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }).start();
+                }).start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
     }
 
     public static final String WM_MESSAGE_PREFIX = "WMID";
