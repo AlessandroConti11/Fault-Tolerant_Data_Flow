@@ -34,8 +34,10 @@ message WorkerManagerRequest {
   oneof request {
     CheckpointRequest checkpoint_request = 1;
     DataResponse result = 2;
+    FlushResponse flush_response = 3;
   }
 }
+
 message DataRequest {
   int64 task_id = 1;
   int64 computation_id = 2;
@@ -107,8 +109,18 @@ message ControlWorkerRequest {
    oneof request {
       UpdateNetworkRequest update_network_request = 1;
       CloseRequest close_request = 2;
+      FlushRequest flush_request = 3;
    }
 }
+
+message FlushRequest {
+   int64 computation_id = 1;
+   repeated int64 groups_id = 2;
+}
+
+message FlushResponse {
+   int64 computation_id = 1;
+};
 
 message UpdateNetworkRequest {
   repeated ProtoAddress addresses = 1;

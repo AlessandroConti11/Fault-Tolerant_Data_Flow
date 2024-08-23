@@ -175,10 +175,11 @@ public class DAGTest {
         assertEquals(1, dag.getGroupsOfTaskManager(1).get(0));
         assertEquals(2, dag.getGroupsOfTaskManager(1).get(1));
 
-        assertEquals(true, dag.getManagersOfNextGroup(0).containsAll(List.of(0L, 1L)));
-        assertEquals(true, dag.getManagersOfNextGroup(1).containsAll(List.of(1L)));
+        /// get next group
+        assertEquals(true, dag.getManagersOfGroup(1).containsAll(List.of(0L, 1L)));
+        assertEquals(true, dag.getManagersOfGroup(2).containsAll(List.of(1L)));
         /// 2 is the last group
-        assertEquals(0, dag.getManagersOfNextGroup(2).size());
+        assertEquals(0, dag.getManagersOfGroup(3).size());
     }
 
     @Test
@@ -230,12 +231,17 @@ public class DAGTest {
                 .setSourceTaskId(t)
                 .build()).collect(Collectors.toList());
 
-        dag.saveCheckpoint(comps.get(0));
-        dag.saveCheckpoint(comps.get(0));
-        dag.saveCheckpoint(comps.get(0));
+        boolean checkpoint_complete = dag.saveCheckpoint(comps.get(0));
+        assertEquals(false, checkpoint_complete);
+        checkpoint_complete = dag.saveCheckpoint(comps.get(0));
+        assertEquals(false, checkpoint_complete);
+        checkpoint_complete = dag.saveCheckpoint(comps.get(0));
+        assertEquals(false, checkpoint_complete);
+
         /// The same checkpoints don't get counted twice
         assertDoesNotThrow(() -> dag.saveCheckpoint(comps.get(0)));
-        dag.saveCheckpoint(comps.get(1));
+        checkpoint_complete = dag.saveCheckpoint(comps.get(1));
+        assertEquals(false, checkpoint_complete);
 
         { /// new scope to re-use namee
             long crashed_id = 0;
@@ -277,11 +283,14 @@ public class DAGTest {
             assertEquals(-1L, grp);
         }
 
-        dag.saveCheckpoint(comps.get(2));
+        checkpoint_complete = dag.saveCheckpoint(comps.get(2));
+        assertEquals(true, checkpoint_complete);
+        dag.moveForwardWithComputation(0);
+
         assertThrowsExactly(AssertionError.class,
                 () -> dag.saveCheckpoint(CheckpointRequest.newBuilder(comps.get(0)).setSourceTaskId(3).build()));
 
-        { /// new scope to re-use namee
+        { /// new scope to re-use name
             long crashed_id = 0;
             var impacted_groups = dag.getGroupsOfTaskManager(crashed_id);
             assertEquals(List.of(0L, 1L), impacted_groups);

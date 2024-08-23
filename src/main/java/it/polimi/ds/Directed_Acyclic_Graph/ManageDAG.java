@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
+import org.apache.commons.collections.functors.OnePredicate;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
@@ -91,6 +92,8 @@ public class ManageDAG {
         long last_checkpoint_group = INVALID_GROUP;
         DataRequest.Builder last_checkpoint;
 
+        Object checkpoint_lock = new Object();
+
         public Computation(List<Data> init_data) {
             this.init_data = init_data;
         }
@@ -106,6 +109,7 @@ public class ManageDAG {
 
     private volatile long computation_count = 0;
     private ConcurrentMap<Long, Computation> running_computations = new ConcurrentHashMap<>();
+    private Object new_computation_lock = new Object();
 
     /**
      * Constructor
@@ -181,8 +185,35 @@ public class ManageDAG {
         return operationsGroup;
     }
 
+    /**
+     * Waits for the first line of checkpoints to be free, then returns the data to
+     * be sent
+     */
     public long newComputation(List<Data> init_data) {
-        running_computations.put(computation_count, new Computation(init_data));
+        synchronized (new_computation_lock) {
+            while (true) {
+                System.out.println(running_computations);
+                var maybe_comp = running_computations.entrySet().stream()
+                        .filter(comp -> comp.getValue().last_checkpoint_group <= checkpointInterval)
+                        .findFirst();
+
+                if (maybe_comp.isPresent()) {
+                    try {
+                        System.out.println("New computation lock");
+                        new_computation_lock.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            synchronized (this) {
+                running_computations.put(computation_count, new Computation(init_data));
+            }
+        }
+
         long ret = computation_count;
         computation_count += 1;
         return ret;
@@ -192,7 +223,10 @@ public class ManageDAG {
         return running_computations;
     }
 
-    public void finishComputation(long computation_id) {
+    public synchronized void finishComputation(long computation_id) {
+        System.out.println("Computation finished");
+
+        releaseLocks(computation_id);
         running_computations.remove(computation_id);
     }
 
@@ -208,6 +242,22 @@ public class ManageDAG {
         for (var d : data) {
             var task_data = ret.get(d.getKey() % maxTasksPerGroup);
             task_data.addData(d);
+        }
+
+        return ret;
+    }
+
+    /**
+     * @param task_id is one of the tasks in those groups
+     * @return A list with all the groups of a stage of a compution, i.e. they are
+     *         from the same checkpoint group
+     */
+    public List<Long> getStageFromTask(long task_id) {
+        long grp = groupFromTask(task_id).get();
+        List<Long> ret = new Vector<>();
+
+        for (int i = 0; i < checkpointInterval; i++) {
+            ret.add(grp - i);
         }
 
         return ret;
@@ -471,14 +521,15 @@ public class ManageDAG {
                 .toList();
     }
 
-    public Set<Long> getManagersOfNextGroup(long group_id) {
-        if (!tasksInGroup.containsKey(group_id + 1)) {
+    public Set<Long> getManagersOfGroup(long group_id) {
+        if (!tasksInGroup.containsKey(group_id)) {
             /// This is the last group. So no task manager is needed.
-            assert group_id == tasksInGroup.size() - 1 : "Group is not the last";
+            assert group_id == tasksInGroup.size() : "Group is not the last";
 
             return new HashSet<>();
         }
-        var nextTasks = tasksInGroup.get(group_id + 1)
+
+        var nextTasks = tasksInGroup.get(group_id)
                 .stream()
                 .map(t -> taskIsInTaskManager.get(t))
                 .map(Long::valueOf)
@@ -523,7 +574,6 @@ public class ManageDAG {
 
         // Get the groups of the task
         List<Long> groups = getGroupsOfTaskManager(taskManagerId);
-        System.out.println("Groups: " + groups);
         // Get the operations of the group
         for (Long group : groups) {
             operations.add(new Pair<>(operationsGroup.get((int) (long) group), group));
@@ -564,8 +614,9 @@ public class ManageDAG {
      *
      * @param checkpointRequest the request object containing the group ID, data,
      *                          and list of operations to be saved.
+     * @return true when the checkpoint is completed, thus it holds all the data
      */
-    public void saveCheckpoint(CheckpointRequest checkpointRequest) {
+    public boolean saveCheckpoint(CheckpointRequest checkpointRequest) {
         var comp = running_computations.get(checkpointRequest.getComputationId());
         assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId()
                 + " should exist. Got " + running_computations;
@@ -576,11 +627,11 @@ public class ManageDAG {
                 + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
         while (grp != comp.current_checkpoint_group) {
-            System.out.println("Waiting for the messages form the last checkpoint to arrive curr: " + grp
+            System.out.println("Waiting for the messages from the last checkpoint to arrive curr: " + grp
                     + " waiting for " + comp.current_checkpoint_group);
-            synchronized (this) {
+            synchronized (comp.checkpoint_lock) {
                 try {
-                    this.wait();
+                    comp.checkpoint_lock.wait();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -590,20 +641,47 @@ public class ManageDAG {
 
         /// TODO: assert that this comes from a repeated computation
         if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
-            return;
+            return false;
 
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
         comp.fragments_received.add(checkpointRequest.getSourceTaskId());
 
         if (comp.fragments_received.size() == maxTasksPerGroup) {
-            comp.last_checkpoint = comp.current_checkpoint;
-            comp.last_checkpoint_group = comp.current_checkpoint_group;
-            comp.current_checkpoint_group += checkpointInterval;
-            comp.fragments_received.clear();
+            return true;
+        }
 
-            synchronized (this) {
-                this.notifyAll();
+        return false;
+    }
+
+    public void moveForwardWithComputation(long comp_id) {
+        var comp = running_computations.get(comp_id);
+
+        comp.last_checkpoint = comp.current_checkpoint;
+        comp.last_checkpoint_group = comp.current_checkpoint_group;
+        comp.current_checkpoint_group += checkpointInterval;
+        comp.fragments_received.clear();
+
+        releaseLocks(comp_id);
+    }
+
+    public void releaseLocks(long comp_id) {
+        System.out.println("Releasing locks for comp " + comp_id);
+
+        /// TODO: Handle this in a better way, this is just a hacky fix to handle the
+        /// last flushing becoming null before receiving the flushresponse
+        var comp = running_computations.get(comp_id);
+        if (comp != null) {
+            synchronized (comp.checkpoint_lock) {
+                comp.checkpoint_lock.notifyAll();
             }
+        }
+
+        synchronized (resume_computation_lock) {
+            resume_computation_lock.notifyAll();
+        }
+
+        synchronized (new_computation_lock) {
+            new_computation_lock.notifyAll();
         }
     }
 
@@ -637,6 +715,26 @@ public class ManageDAG {
         return Optional.empty();
     }
 
+    private Object resume_computation_lock = new Object();
+
+    public void waitForNextStageToBeFree(long task_id) {
+        long grp = groupFromTask(task_id).get();
+        assert isCheckpoint(grp);
+
+        long next_grp = grp + checkpointInterval;
+
+        while (getCurrentComputationOfGroup(next_grp).isPresent()) {
+            System.out.println("LOCK on computation " + getCurrentComputationOfGroup(next_grp).get());
+            synchronized (resume_computation_lock) {
+                try {
+                    resume_computation_lock.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
     /*
      * insieme 1 --> insieme 2 -->
      * 
@@ -645,7 +743,7 @@ public class ManageDAG {
      * DAG:
      * - insiemi successivi
      * - TMid
-     * - Tid
+     * - Tid1
      * - check point
      * 
      * operation to execute

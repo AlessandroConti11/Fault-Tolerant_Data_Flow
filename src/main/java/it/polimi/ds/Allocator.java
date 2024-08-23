@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.List;
+import java.util.Vector;
 
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
@@ -13,6 +15,8 @@ public class Allocator {
 
     public static final int PORT = 9090;
     public static int procCounter = 0;
+
+    private static List<Process> procs = new Vector<>();
 
     public static void main(String[] args) throws IOException {
         try (ServerSocket listener = new ServerSocket(PORT)) {
@@ -34,13 +38,16 @@ public class Allocator {
                             Process proc = process_builder
                                     .command("java", "-ea", "-jar", "target/coordinator.jar")
                                     .redirectOutput(ProcessBuilder.Redirect.PIPE)
-                                    .start();
+                                .start();
+
+                            procs.add(proc);
 
                             BufferedReader reader = new BufferedReader(
                                     new InputStreamReader(proc.getInputStream()));
 
                             String line = reader.readLine();
                             Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
+
 
                             conn.send(AllocateNodeManagerResponse.newBuilder()
                                     .setAddress(coord_addr.toProto())
@@ -56,6 +63,8 @@ public class Allocator {
                                                 new Address(info.getAddress()).toString())
                                         .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                         .start();
+
+                                procs.add(proc);
 
                                 spoofOutput(proc,
                                         "[" + colors[(procId + i) % colors.length] + "WORKER(" + (procId + i) + ")" + RESET
@@ -91,15 +100,20 @@ public class Allocator {
                         line = reader.readLine();
                         continue;
                     }
-                    System.out.println(pr + line);
+                    System.out.println(getAlivePrefix() + pr + line);
                     line = reader.readLine();
                 }
 
             } catch (IOException e) {
-                System.out.println(prefix + "Error reading output, closing pipe");
+                System.out.println(getAlivePrefix() + prefix + "Error reading output, closing pipe");
             }
-            System.out.println(RED + "****EXIT**** " + RESET + prefix);
+            procs.remove(p);
+            System.out.println(getAlivePrefix() + RED + "****EXIT**** " + RESET + prefix);
         }).start();
+    }
+
+    private static String getAlivePrefix() {
+        return "[" + procs.stream().filter(p -> p.isAlive()).count() + "/" + procs.size() + "]";
     }
 
     public static final String RESET = "\033[0m"; // Text Reset

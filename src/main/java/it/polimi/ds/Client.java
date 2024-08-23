@@ -157,6 +157,10 @@ public class Client {
                         "map;add;13\n" +
                         "filter;lower_or_equal;93\n" +
                         "change_key;add;75\n" +
+                        "change_key;add;75\n" +
+                        "change_key;add;75\n" +
+                        "change_key;add;75\n" +
+                        "change_key;add;75\n" +
                         "filter;not_equal;11\n" +
                         "map;mult;77\n" +
                         "filter;not_equal;19\n" +
@@ -173,17 +177,13 @@ public class Client {
         data.add(new Pair<>(1, 1));
         data.add(new Pair<>(2, 2));
 
-        // synchronized (data) {
-        //     try {
-        //         data.wait();
-        //     } catch (Exception e) {}
-        // }
         request.sendData(data);
         request.sendData(data);
-        request.sendData(data);
-        request.sendData(data);
+        // request.sendData(data);
+        // request.sendData(data);
 
-        request.getResponses().forEach(System.out::println);
+        // request.getResponses().forEach(System.out::println);
+        request.getResponses();
         request.close();
     }
 }

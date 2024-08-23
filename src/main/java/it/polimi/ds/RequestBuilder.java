@@ -3,6 +3,10 @@ package it.polimi.ds;
 import java.io.IOException;
 import java.util.List;
 import java.util.Vector;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
@@ -22,19 +26,30 @@ import it.polimi.ds.proto.Role;
 import org.javatuples.Pair;
 
 public class RequestBuilder {
+    private final static ExecutorService exe = Executors.newCachedThreadPool();
+
     class Request {
         Node coordinator;
-        Vector<DataResponse> responses = new Vector<>();
+        Vector<Future<DataResponse>> responses = new Vector<>();
 
         private Request(Node coord) {
             this.coordinator = coord;
         }
 
         public Vector<DataResponse> getResponses() {
-            return responses;
+            return responses.stream().map(fut -> {
+				try {
+					var f = fut.get();
+                    System.out.println("FUT " +  f);
+                    return f;
+				} catch (InterruptedException | ExecutionException e) {
+					e.printStackTrace();
+				}
+				return null;
+			}).collect(Collectors.toCollection(Vector::new));
         }
 
-        public Object sendData(List<Pair<Integer, Integer>> data) throws IOException {
+        public void sendData(List<Pair<Integer, Integer>> data) throws IOException {
             coordinator.send(ClientRequest.newBuilder()
                     .setDataRequest(DataRequest.newBuilder()
                             .setTaskId(-1)
@@ -48,9 +63,8 @@ public class RequestBuilder {
                             .build())
                     .build());
 
-            DataResponse response = coordinator.receive(DataResponse.class);
-            responses.add(response);
-            return response;
+
+            responses.add(exe.submit(() -> coordinator.receive(DataResponse.class)));
         }
 
         public void close() throws IOException {

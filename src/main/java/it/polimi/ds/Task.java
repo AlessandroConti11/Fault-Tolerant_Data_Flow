@@ -30,6 +30,8 @@ class Task {
     private final int group_size;
     private final ProtoComputation computation;
 
+    private final Object computation_lock = new Object();
+
     private ConcurrentMap<Long, List<Long>> received_data_from = new ConcurrentHashMap<>();
     private volatile boolean has_all_data = false;
     private int data_count = 0;
@@ -67,12 +69,16 @@ class Task {
         return has_all_data;
     }
 
-    public void reset() {
+    public long getGroupId() {
+        return group_id;
+    }
+
+    public synchronized void flushComputation(long comp_id) {
+        received_data_from.remove(comp_id);
         has_all_data = false;
-        data_count = 0;
         data.clear();
-        // received_data_from = new Vector<>();
         already_computed = false;
+        data_count = 0;
     }
 
     public synchronized void addData(DataRequest req) {
@@ -82,8 +88,8 @@ class Task {
 
         if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask())) {
             if (data_count == group_size) {
-                synchronized (this) {
-                    this.notifyAll();
+                synchronized (computation_lock) {
+                    computation_lock.notifyAll();
                 }
             }
             return;
@@ -92,9 +98,10 @@ class Task {
         assert has_all_data == false;
         assert data_count < group_size;
 
-        if (data_count == 0) 
+        if (data_count == 0)
             current_computation_id = req.getComputationId();
-        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: " + req.getComputationId() + " task " + getId() + " data " + data_count;
+        assert current_computation_id == req.getComputationId() : "current: " + current_computation_id + " received: "
+                + req.getComputationId() + " task " + getId() + " data " + data_count;
 
         received_data_from.get(req.getComputationId()).add(req.getSourceTask());
         this.data.addAll(req.getDataList());
@@ -107,8 +114,8 @@ class Task {
         if (data_count == group_size) {
             has_all_data = true;
 
-            synchronized (this) {
-                this.notifyAll();
+            synchronized (computation_lock) {
+                computation_lock.notifyAll();
             }
         }
     }
@@ -124,8 +131,8 @@ class Task {
         } else {
             if (received_data_from.get(req.getComputationId()).contains(req.getSourceTask())) {
                 if (data_count == group_size) {
-                    synchronized (this) {
-                        this.notifyAll();
+                    synchronized (computation_lock) {
+                        computation_lock.notifyAll();
                     }
                 }
                 return;
@@ -142,8 +149,8 @@ class Task {
         }
         assert current_computation_id == req.getComputationId();
 
-        synchronized (this) {
-            this.notifyAll();
+        synchronized (computation_lock) {
+            computation_lock.notifyAll();
         }
     }
 
@@ -188,9 +195,9 @@ class Task {
     }
 
     public void waitForData() {
-        synchronized (this) {
+        synchronized (computation_lock) {
             try {
-                this.wait();
+                computation_lock.wait();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

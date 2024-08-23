@@ -16,15 +16,18 @@ import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 import com.google.protobuf.ByteString;
 
 import it.polimi.ds.proto.ProtoComputation;
 import it.polimi.ds.proto.CheckpointRequest;
+import it.polimi.ds.proto.CloseResponse;
 import it.polimi.ds.proto.ControlWorkerRequest;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataRequest;
 import it.polimi.ds.proto.DataResponse;
+import it.polimi.ds.proto.FlushResponse;
 import it.polimi.ds.proto.ProtoTask;
 import it.polimi.ds.proto.RegisterNodeManagerRequest;
 import it.polimi.ds.proto.RegisterNodeManagerResponse;
@@ -127,8 +130,6 @@ public class WorkerManager {
             new Thread(() -> {
                 while (true) {
                     processTask(task);
-
-                    task.reset();
                 }
             }).start();
         }
@@ -139,6 +140,7 @@ public class WorkerManager {
 
     public void processTask(Task task) {
         task.waitForData();
+        System.out.println("Processing tid:" + task.getId());
         FaultyThread.maybeCrash();
 
         synchronized (task) {
@@ -170,12 +172,21 @@ public class WorkerManager {
                     return;
                 }
 
-                System.out.println("Sending task to " + successor_id);
+                System.out.println("Sending results to " + successor_id);
 
                 while (true) {
                     try {
                         Node conn = new Node(successor);
                         System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
+
+                        if (task.isCheckpoint()) {
+                            writeBackCheckpoint(coordinator, task);
+
+                            /// Wait for the coordinator to tell this worker to go on with the computation.
+                            /// This notice is in the form of a flush request that tells that the next group
+                            /// is ready to compute
+                            task.wait();
+                        }
 
                         successors.get(successor_id).stream().forEach(next_task_id -> {
                             assert task.getId() < next_task_id : "Task id is in successors group";
@@ -193,10 +204,6 @@ public class WorkerManager {
                         });
                         conn.close();
 
-                        if (task.isCheckpoint()) {
-                            writeBackCheckpoint(coordinator, task);
-                        }
-
                         break;
                     } catch (IOException e) {
                         System.out.println("A successor is not available");
@@ -207,6 +214,8 @@ public class WorkerManager {
                                 e1.printStackTrace();
                             }
                         }
+                    } catch (InterruptedException e1) {
+                        e1.printStackTrace();
                     }
                 }
             });
@@ -271,8 +280,43 @@ public class WorkerManager {
                 System.exit(0);
             }
 
+            if (req.hasFlushRequest()) {
+                var f_req = req.getFlushRequest();
+
+                System.out.println("Flushing " + f_req.getGroupsIdList());
+
+                List<Task> tt = tasks.stream()
+                        .filter(t -> f_req.getGroupsIdList().contains(t.getGroupId()))
+                        .collect(Collectors.toList());
+
+                System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).collect(Collectors.toList()));
+
+                tt.forEach(t -> t.flushComputation((long) f_req.getComputationId()));
+
+                try {
+                    coordinator.send(WorkerManagerRequest.newBuilder()
+                            .setFlushResponse(FlushResponse.newBuilder()
+                                    .setComputationId(f_req.getComputationId())
+                                    .build())
+                            .build());
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                /// Notify the other thread that the computation can now resume since the next
+                /// stage of computation is free
+                tt.forEach(t -> {
+                    synchronized (t) {
+                        t.notifyAll();
+                    }
+                });
+
+                continue;
+            }
+
             System.out.println("Received control request");
-            assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle";
+            assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle: " + req;
             synchronized (network_nodes) {
                 var network_change = req.getUpdateNetworkRequest();
 
@@ -297,6 +341,9 @@ public class WorkerManager {
 
             System.out.println("network " + network_nodes);
         }
+
+        System.out.println("Bye bye");
+        System.exit(0);
     }
 
     /// DataCommunicator thread handles the communication with the other nodes in
@@ -327,6 +374,7 @@ public class WorkerManager {
                             assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER
                                     : "Got message from unexpected source";
 
+                            System.out.println(req.getSourceRole());
                             Task t = getTask(req.getTaskId());
                             assert t != null : "Unknown task id expected: " + tasks + " got: " + req.getTaskId();
 
