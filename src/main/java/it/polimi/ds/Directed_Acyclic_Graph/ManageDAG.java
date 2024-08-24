@@ -299,7 +299,7 @@ public class ManageDAG {
     }
 
     public boolean isCheckpoint(long groupId) {
-        return groupId < getNumberOfGroups() && (groupId % checkpointInterval) == checkpointInterval - 1;
+        return groupId < getNumberOfGroups() - 1 && (groupId % checkpointInterval) == checkpointInterval - 1;
     }
 
     public List<DataRequest.Builder> getLastCheckpoint(long computation_id) {
@@ -607,6 +607,10 @@ public class ManageDAG {
         }
 
         return result;
+    }
+
+    public int getCheckpointInterval() {
+        return checkpointInterval;
     }
 
     /**

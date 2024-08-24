@@ -287,9 +287,6 @@ public class DAGTest {
         assertEquals(true, checkpoint_complete);
         dag.moveForwardWithComputation(0);
 
-        assertThrowsExactly(AssertionError.class,
-                () -> dag.saveCheckpoint(CheckpointRequest.newBuilder(comps.get(0)).setSourceTaskId(3).build()));
-
         { /// new scope to re-use name
             long crashed_id = 0;
             var impacted_groups = dag.getGroupsOfTaskManager(crashed_id);
@@ -327,5 +324,36 @@ public class DAGTest {
             long grp = dag.getGroupOfLastCheckpoint(impacted_cid);
             assertEquals(1L, grp);
         }
+    }
+
+    @Test
+    public void lastCantBeCheckpoint() throws Exception {
+        final String program = "filter;not_equal;55\n" +
+                "change_key;add;70\n" +
+                "map;add;13\n" +
+                "filter;lower_or_equal;93\n" +
+                "change_key;add;75\n" +
+                "change_key;add;75\n" +
+                "change_key;add;75\n" +
+                "change_key;add;75\n" +
+                "change_key;add;75\n" +
+                "change_key;add;75\n" +
+                "filter;not_equal;11\n" +
+                "map;mult;77\n" +
+                "filter;not_equal;19\n" +
+                "change_key;add;75";
+
+        final ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 2);
+        final int num_of_grps = dag.getNumberOfGroups();
+        final int check_interval = dag.getCheckpointInterval();
+        for (int i = 0; i < num_of_grps - 1; i++) {
+            if (i % check_interval == check_interval - 1) {
+                assertEquals(true, dag.isCheckpoint(i));
+            } else {
+                assertEquals(false, dag.isCheckpoint(i));
+            }
+        }
+
+        assertEquals(false, dag.isCheckpoint(num_of_grps - 1));
     }
 }
