@@ -58,7 +58,8 @@ message CloseResponse {}
 message CheckpointRequest {
   int64 computation_id = 1;
   int64 source_task_id = 2;
-  repeated Data data = 3;
+  int32 is_from_another_checkpoint = 3;
+  repeated Data data = 4;
 }
 
 message CheckpointResponse {}

@@ -621,6 +621,10 @@ public class ManageDAG {
      * @return true when the checkpoint is completed, thus it holds all the data
      */
     public boolean saveCheckpoint(CheckpointRequest checkpointRequest) {
+        if (checkpointRequest.getIsFromAnotherCheckpoint() != 0) {
+            return true;
+        }
+
         var comp = running_computations.get(checkpointRequest.getComputationId());
         assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId()
                 + " should exist. Got " + running_computations;
@@ -630,7 +634,8 @@ public class ManageDAG {
         assert grp <= comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
                 + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
-        while (grp != comp.current_checkpoint_group) {
+        /// Skips the last since it can't be a checkpoint by definition
+        while (comp.current_checkpoint_group < getNumberOfGroups() && grp != comp.current_checkpoint_group) {
             System.out.println("Waiting for the messages from the last checkpoint to arrive curr: " + grp
                     + " waiting for " + comp.current_checkpoint_group);
             synchronized (comp.checkpoint_lock) {
@@ -729,6 +734,7 @@ public class ManageDAG {
 
         while (getCurrentComputationOfGroup(next_grp).isPresent()) {
             System.out.println("LOCK on computation " + getCurrentComputationOfGroup(next_grp).get());
+            System.out.println(running_computations);
             synchronized (resume_computation_lock) {
                 try {
                     resume_computation_lock.wait();

@@ -14,7 +14,7 @@ import it.polimi.ds.proto.NodeManagerInfo;
 public class Allocator {
 
     public static final int PORT = 9090;
-    public static int procCounter = 0;
+    public static volatile int procCounter = 0;
 
     private static List<Process> procs = new Vector<>();
 

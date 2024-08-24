@@ -178,9 +178,12 @@ public class Client {
         data.add(new Pair<>(2, 2));
 
         request.sendData(data);
+        data.add(new Pair<>(3, 3));
         request.sendData(data);
-        // request.sendData(data);
-        // request.sendData(data);
+        data.add(new Pair<>(4, 2));
+        request.sendData(data);
+        data.add(new Pair<>(5, 5));
+        request.sendData(data);
 
         // request.getResponses().forEach(System.out::println);
         request.getResponses();

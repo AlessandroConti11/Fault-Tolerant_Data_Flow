@@ -36,7 +36,8 @@ class Task {
     private volatile boolean has_all_data = false;
     private int data_count = 0;
     private List<Data> data;
-    private boolean already_computed = false;
+    private volatile boolean already_computed = false;
+    private volatile boolean dont_send_back_checkpoint = false;
 
     private List<Pair<Integer, Integer>> result;
 
@@ -82,6 +83,7 @@ class Task {
     }
 
     public synchronized void addData(DataRequest req) {
+        dont_send_back_checkpoint = false;
         if (!received_data_from.containsKey(req.getComputationId())) {
             received_data_from.put(req.getComputationId(), new Vector<Long>());
         }
@@ -120,11 +122,32 @@ class Task {
         }
     }
 
+    public List<Pair<Integer, Integer>> checkpointToResult(List<Data> datas) {
+        List<Pair<Integer, Integer>> res = new ArrayList<>();
+        for (Data d : datas) {
+            res.add(Pair.with(d.getKey(), d.getValue()));
+        }
+
+        return res;
+    }
+
     public boolean hasAlreadyComputed() {
         return already_computed;
     }
 
     public synchronized void restartFromCheckpoint(DataRequest req) {
+        dont_send_back_checkpoint = false;
+
+        if (req.getSourceRole() == Role.MANAGER) {
+            assert data_count == 0 : "Received checkpoint while in the middle of a running computation";
+
+            already_computed = true;
+            dont_send_back_checkpoint = true;
+            current_computation_id = req.getComputationId();
+            this.result = checkpointToResult(req.getDataList());
+            data_count = group_size;
+        } 
+
         if (!received_data_from.containsKey(req.getComputationId())) {
             /// TODO: It would be better to add all tasks to this
             received_data_from.put(req.getComputationId(), List.of(req.getSourceTask()));
@@ -139,15 +162,8 @@ class Task {
             }
         }
 
-        if (!hasAlreadyComputed()) {
-            assert data_count == 0;
-            current_computation_id = req.getComputationId();
-            this.data.addAll(req.getDataList());
-
-            data_count = group_size;
-            has_all_data = true;
-        }
-        assert current_computation_id == req.getComputationId();
+        assert current_computation_id == req.getComputationId()
+                : "Computation mismatch got " + req.getComputationId() + " expect " + current_computation_id;
 
         synchronized (computation_lock) {
             computation_lock.notifyAll();
@@ -214,5 +230,9 @@ class Task {
 
     public boolean isCheckpoint() {
         return is_checkpoint;
+    }
+
+    public boolean skipCheckpointWriteBack() {
+        return dont_send_back_checkpoint;
     }
 }

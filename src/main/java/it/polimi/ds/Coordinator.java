@@ -159,23 +159,21 @@ public class Coordinator {
                                     .distinct()
                                     .collect(Collectors.toList());
 
-                            assert comp_list.size() <= 1 : "Somehow a crash impacted more than one computation";
                             if (comp_list.size() == 0) {
-                                /// TODO: Still a bug here
                                 System.out.println("No running computation impacted "
                                         + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
                                 continue;
                             }
 
-                            var comp_id = comp_list.get(0);
-
                             System.out.println("Sending checkpoint");
-                            long grp = dag.getGroupOfLastCheckpoint(comp_id);
-                            if (grp == -1) {
-                                var data = dag.getDataRequestsForGroup(comp_id, 0);
-                                sendComputation(data, 0, comp_id, grp);
-                            } else {
-                                sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
+                            for (var comp_id : comp_list) {
+                                long grp = dag.getGroupOfLastCheckpoint(comp_id);
+                                if (grp == -1) {
+                                    var data = dag.getDataRequestsForGroup(comp_id, 0);
+                                    sendComputation(data, 0, comp_id, grp);
+                                } else {
+                                    sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
+                                }
                             }
                         }
                         allocated.clear();
@@ -368,7 +366,8 @@ public class Coordinator {
             ServerSocket workerListener = new ServerSocket(WORKER_PORT);
             while (true) {
                 Node node = new Node(workerListener.accept());
-                /// TODO: Handle this case, in theory it should never happen, but you never know.
+                /// TODO: Handle this case, in theory it should never happen, but you never
+                /// know.
                 /// This happens when we initialize to many workerManagers somehow
                 long id = dag.getNextFreeTaskManager().orElseThrow();
 
@@ -591,8 +590,13 @@ public class Coordinator {
 
                                     System.out.println("Flushing comp " + comp_id);
                                     var grps = dag.getStageFromTask(src_task_id);
-                                    dag.waitForNextStageToBeFree(src_task_id);
-                                    dag.moveForwardWithComputation(comp_id);
+
+                                    /// If it's not the result of a checkpoint recovery, then wait for the next step
+                                    /// to be empty
+                                    if (c_req.getIsFromAnotherCheckpoint() == 0) {
+                                        dag.waitForNextStageToBeFree(src_task_id);
+                                        dag.moveForwardWithComputation(comp_id);
+                                    }
 
                                     /// Send the flushing request to the appropriate worker manager
                                     var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))

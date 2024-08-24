@@ -184,7 +184,7 @@ public class WorkerManager {
 
                             /// Wait for the coordinator to tell this worker to go on with the computation.
                             /// This notice is in the form of a flush request that tells that the next group
-                            /// is ready to compute
+                            /// that it's ready to compute
                             task.wait();
                         }
 
@@ -225,18 +225,25 @@ public class WorkerManager {
 
     public void writeBackCheckpoint(Node node, Task task) {
         System.out.println("Sending back checkpoint");
+        var req = CheckpointRequest.newBuilder()
+                .setComputationId(task.getComputationId())
+                .setSourceTaskId(task.getId());
+
+        if (!task.skipCheckpointWriteBack()) {
+            req.addAllData(task.getResult().stream()
+                    .map(p -> Data.newBuilder()
+                            .setKey(p.getValue0())
+                            .setValue(p.getValue1())
+                            .build())
+                    .toList());
+        } else {
+            req.setIsFromAnotherCheckpoint(1);
+        }
+
         try {
             node.send(WorkerManagerRequest.newBuilder()
-                    .setCheckpointRequest(CheckpointRequest.newBuilder()
-                            .setComputationId(task.getComputationId())
-                            .setSourceTaskId(task.getId())
-                            .addAllData(task.getResult().stream()
-                                    .map(p -> Data.newBuilder()
-                                            .setKey(p.getValue0())
-                                            .setValue(p.getValue1())
-                                            .build())
-                                    .toList())
-                            .build())
+                    .setCheckpointRequest(
+                            req.build())
                     .build());
         } catch (IOException e) {
             e.printStackTrace();
