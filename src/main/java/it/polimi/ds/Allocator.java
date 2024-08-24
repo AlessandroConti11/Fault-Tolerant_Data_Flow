@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.List;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
@@ -14,31 +15,30 @@ import it.polimi.ds.proto.NodeManagerInfo;
 public class Allocator {
 
     public static final int PORT = 9090;
-    public static volatile int procCounter = 0;
+    public static AtomicInteger procCounter = new AtomicInteger(0);
 
     private static List<Process> procs = new Vector<>();
 
     public static void main(String[] args) throws IOException {
         try (ServerSocket listener = new ServerSocket(PORT)) {
-            ProcessBuilder process_builder = new ProcessBuilder("mvn")
-                    .redirectErrorStream(true);
 
             System.out.println("Server is running on " + Address.getOwnAddress().withPort(PORT).toString());
 
             while (true) {
                 Node conn = new Node(listener.accept());
-                procCounter++;
-                int procId = procCounter;
 
                 new Thread(() -> {
+                    ProcessBuilder process_builder = new ProcessBuilder("mvn")
+                        .redirectErrorStream(true);
+
                     try {
                         var req = conn.receive(AllocateNodeManagerRequest.class);
                         if (req.hasCoordinator() && req.getCoordinator() == true) {
-
+                            int procId = procCounter.addAndGet(1);
                             Process proc = process_builder
-                                    .command("java", "-ea", "-jar", "target/coordinator.jar")
+                                    .command("java", "-ea", "-jar", "target/coordinator.jar", Integer.toString(procId))
                                     .redirectOutput(ProcessBuilder.Redirect.PIPE)
-                                .start();
+                                    .start();
 
                             procs.add(proc);
 
@@ -48,26 +48,29 @@ public class Allocator {
                             String line = reader.readLine();
                             Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
 
-
                             conn.send(AllocateNodeManagerResponse.newBuilder()
                                     .setAddress(coord_addr.toProto())
                                     .build());
 
                             spoofOutput(proc,
-                                    "[" + colors[procId % colors.length] + "COORDINATOR(" + procId + ")" + RESET + "] ");
+                                    "[" + colors[procId % colors.length] + "COORDINATOR(" + procId + ")" + RESET
+                                            + "] ");
                         } else if (req.hasNodeManagerInfo()) {
                             NodeManagerInfo info = req.getNodeManagerInfo();
                             for (int i = 0; i < info.getNumContainers(); i++) {
+                                int procId = procCounter.addAndGet(1);
+
                                 Process proc = process_builder
                                         .command("java", "-ea", "-jar", "target/workers.jar",
-                                                new Address(info.getAddress()).toString())
+                                            new Address(info.getAddress()).toString(), Integer.toString(procId)) 
                                         .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                         .start();
 
                                 procs.add(proc);
 
                                 spoofOutput(proc,
-                                        "[" + colors[(procId + i) % colors.length] + "WORKER(" + (procId + i) + ")" + RESET
+                                        "[" + colors[(procId + i) % colors.length] + "WORKER(" + (procId + i) + ")"
+                                                + RESET
                                                 + "] ");
                             }
 
@@ -85,6 +88,7 @@ public class Allocator {
     }
 
     public static final String WM_MESSAGE_PREFIX = "WMID";
+
     static void spoofOutput(Process p, String prefix) {
         new Thread(() -> {
             String pr = prefix;

@@ -91,12 +91,13 @@ public class WorkerManager {
     }
 
     public WorkerManager(String[] args) throws IOException {
+        int PID = Integer.parseInt(args[1]);
         System.out.println("args: " + Arrays.toString(args));
         coordinator_address = Address.fromString(args[0]).getValue0();
         coordinator = new Node(coordinator_address);
 
         coordinator.send(RegisterNodeManagerRequest.newBuilder()
-                .setAddress(Address.getOwnAddress().toProto())
+                .setAddress(Address.getOwnAddress().withPort(PID + WorkerManager.DATA_PORT).toProto())
                 .setTaskSlots(TASK_SLOTS)
                 .build());
 
@@ -110,11 +111,11 @@ public class WorkerManager {
         System.out.println("grp size" + group_size);
 
         data_listener = ServerSocketChannel.open();
-        data_listener.bind(new InetSocketAddress(WorkerManager.DATA_PORT + (int) id));
+        data_listener.bind(new InetSocketAddress(PID + WorkerManager.DATA_PORT));
         data_listener.configureBlocking(false);
 
         System.out.println("DataConnection is listeninng on "
-                + Address.getOwnAddress().withPort(WorkerManager.DATA_PORT + (int) id));
+                + Address.getOwnAddress().withPort(PID + WorkerManager.DATA_PORT));
 
         data_communicator.start();
 

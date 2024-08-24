@@ -4,19 +4,22 @@ import java.io.File;
 import java.io.IOException;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Scanner;
+import java.util.Vector;
 import java.util.stream.Collectors;
+
+import org.javatuples.Pair;
 
 import com.google.protobuf.ByteString;
 
-import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.RequestBuilder.Request;
-
+import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.proto.Data;
 import it.polimi.ds.proto.DataResponse;
-import org.javatuples.Pair;
 
 public class Client {
     /**
@@ -149,44 +152,101 @@ public class Client {
 
     /// Nel caso la metto nel commit lasciami sto main che è comodo per testare la
     /// roba
-    public static void main(String[] args) throws UnknownHostException, IOException {
-        Request request = new RequestBuilder()
-                .setAllocations(2)
-                .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
-                        "change_key;add;70\n" +
-                        "map;add;13\n" +
-                        "filter;lower_or_equal;93\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "filter;not_equal;11\n" +
-                        "map;mult;77\n" +
-                        "filter;not_equal;19\n" +
-                        "change_key;add;75" +
-                        ""))
-                .addAllocators(Arrays.asList(args).stream()
-                        .map(Address::fromStringIp)
-                        .map(a -> a.getValue0().withPort(Allocator.PORT))
-                        .collect(Collectors.toList()))
-                .allocate();
+    public static void main(String[] args) throws UnknownHostException, IOException, InterruptedException {
+        Thread t1 = new Thread(() -> {
+            try {
+                Request request = new RequestBuilder()
+                        .setAllocations(2)
+                        .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
+                                "change_key;add;70\n" +
+                                "map;add;13\n" +
+                                "filter;lower_or_equal;93\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "filter;not_equal;11\n" +
+                                "map;mult;77\n" +
+                                "filter;not_equal;19\n" +
+                                "change_key;add;75" +
+                                ""))
+                        .addAllocators(Arrays.asList(args).stream()
+                                .map(Address::fromStringIp)
+                                .map(a -> a.getValue0().withPort(Allocator.PORT))
+                                .collect(Collectors.toList()))
+                        .allocate();
 
-        List<Pair<Integer, Integer>> data = new ArrayList<>();
+                List<Pair<Integer, Integer>> data = new ArrayList<>();
 
-        data.add(new Pair<>(1, 1));
-        data.add(new Pair<>(2, 2));
+                data.add(new Pair<>(1, 1));
+                data.add(new Pair<>(2, 2));
 
-        request.sendData(data);
-        data.add(new Pair<>(3, 3));
-        request.sendData(data);
-        data.add(new Pair<>(4, 2));
-        request.sendData(data);
-        data.add(new Pair<>(5, 5));
-        request.sendData(data);
+                request.sendData(data);
+                // data.add(new Pair<>(3, 3));
+                // request.sendData(data);
+                // data.add(new Pair<>(4, 2));
+                // request.sendData(data);
+                // data.add(new Pair<>(5, 5));
+                // request.sendData(data);
 
-        // request.getResponses().forEach(System.out::println);
-        request.getResponses();
-        request.close();
+                // request.getResponses().forEach(System.out::println);
+                request.getResponses();
+                request.close();
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+        });
+
+
+        Thread t2 =new Thread(() -> {
+            try {
+                Request request = new RequestBuilder()
+                        .setAllocations(2)
+                        .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
+                                "change_key;add;70\n" +
+                                "map;add;13\n" +
+                                "filter;lower_or_equal;93\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "change_key;add;75\n" +
+                                "filter;not_equal;11\n" +
+                                "map;mult;77\n" +
+                                "filter;not_equal;19\n" +
+                                "change_key;add;75" +
+                                ""))
+                        .addAllocators(Arrays.asList(args).stream()
+                                .map(Address::fromStringIp)
+                                .map(a -> a.getValue0().withPort(Allocator.PORT))
+                                .collect(Collectors.toList()))
+                        .allocate();
+
+                List<Pair<Integer, Integer>> data = new ArrayList<>();
+
+                data.add(new Pair<>(1, 1));
+                data.add(new Pair<>(2, 2));
+
+                request.sendData(data);
+                // data.add(new Pair<>(3, 3));
+                // request.sendData(data);
+                // data.add(new Pair<>(4, 2));
+                // request.sendData(data);
+                // data.add(new Pair<>(5, 5));
+                // request.sendData(data);
+
+                // request.getResponses().forEach(System.out::println);
+                request.getResponses();
+                request.close();
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+        });
+        t1.start();
+        t2.start();
+
+        t1.join();
+        t2.join();
     }
 }

@@ -52,8 +52,11 @@ import it.polimi.ds.proto.WorkerManagerRequest;
 
 public class Coordinator {
 
-    public static int CLIENT_PORT = 5000;
-    public static int WORKER_PORT = 5001;
+    /// This is set in the main
+    private static int PID;
+
+    private static int CLIENT_PORT = 15000;
+    private static int WORKER_PORT = 25000;
 
     private final ExecutorService exe = Executors.newCachedThreadPool();
 
@@ -192,7 +195,7 @@ public class Coordinator {
     Thread clientListener = new Thread(() -> {
         try {
             /// Wait for a client to connect
-            ServerSocket client_listener = new ServerSocket(CLIENT_PORT);
+            ServerSocket client_listener = new ServerSocket(PID + CLIENT_PORT);
             Node client = new Node(client_listener.accept());
 
             /// Receive from the client the allocation request that will contian the number
@@ -219,8 +222,6 @@ public class Coordinator {
                 client.close();
                 System.exit(0);
             }
-
-            System.out.println("workers: " + workers.size());
 
             startWorker();
 
@@ -363,7 +364,8 @@ public class Coordinator {
 
     Thread workerListener = new Thread(() -> {
         try {
-            ServerSocket workerListener = new ServerSocket(WORKER_PORT);
+            System.out.println(PID + WORKER_PORT);
+            ServerSocket workerListener = new ServerSocket(PID + WORKER_PORT);
             while (true) {
                 Node node = new Node(workerListener.accept());
                 /// TODO: Handle this case, in theory it should never happen, but you never
@@ -452,7 +454,7 @@ public class Coordinator {
             this.id = id;
 
             var registration = conn.receive(RegisterNodeManagerRequest.class);
-            this.address = new Address(registration.getAddress()).withPort(WorkerManager.DATA_PORT + (int) (long) id);
+            this.address = new Address(registration.getAddress());
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
             this.is_last = tasks.stream()
@@ -668,7 +670,7 @@ public class Coordinator {
         Node h = new Node(allocators.get(0));
         h.send(AllocateNodeManagerRequest.newBuilder()
                 .setNodeManagerInfo(NodeManagerInfo.newBuilder()
-                        .setAddress(Address.getOwnAddress().withPort(WORKER_PORT).toProto())
+                        .setAddress(Address.getOwnAddress().withPort(PID + WORKER_PORT).toProto())
                         .setNumContainers(requestedWorkers).build())
                 .build());
 
@@ -707,8 +709,10 @@ public class Coordinator {
     }
 
     public static void main(String[] args) throws SocketException {
+        PID = Integer.parseInt(args[0]) % 60_000;
+
         /// This sends the address back to the host process
-        System.out.println("ADDRESS::" + Address.getOwnAddress().withPort(CLIENT_PORT));
+        System.out.println("ADDRESS::" + Address.getOwnAddress().withPort(PID + CLIENT_PORT));
 
         Coordinator coord = new Coordinator();
         coord.start();

@@ -122,7 +122,6 @@ public class RequestBuilder {
 
         Node coordinator = null;
         try {
-
             coordinator = new Node(coordinator_address);
             coordinator.send(AllocationRequest.newBuilder()
                     .addAllAllocators(allocators.stream().map(a -> a.toProto()).collect(Collectors.toList()))
