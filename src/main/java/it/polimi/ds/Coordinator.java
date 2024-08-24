@@ -61,7 +61,7 @@ public class Coordinator {
     private final ExecutorService exe = Executors.newCachedThreadPool();
 
     private ConcurrentMap<Long, WorkerManagerHandler> workers = new ConcurrentHashMap<>();
-    private ByteString program; // TODO: Change this into the actual type after parsing step
+    private ByteString program;
     private List<Address> allocators;
 
     private ConcurrentMap<Long, ResultBuilder> result_builders = new ConcurrentHashMap<>();
@@ -584,34 +584,38 @@ public class Coordinator {
                                     .getNumberOfGroups() : "Checkpoint doesn't make sense to be the last group";
 
                             exe.submit(() -> {
-                                boolean is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
-                                if (is_checkpoint_complete) {
-                                    var c_req = req.getCheckpointRequest();
-                                    long comp_id = c_req.getComputationId();
-                                    long src_task_id = c_req.getSourceTaskId();
+                                try {
+                                    boolean is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
+                                    if (is_checkpoint_complete) {
+                                        var c_req = req.getCheckpointRequest();
+                                        long comp_id = c_req.getComputationId();
+                                        long src_task_id = c_req.getSourceTaskId();
 
-                                    System.out.println("Flushing comp " + comp_id);
-                                    var grps = dag.getStageFromTask(src_task_id);
+                                        System.out.println("Flushing comp " + comp_id);
+                                        var grps = dag.getStageFromTask(src_task_id);
 
-                                    /// If it's not the result of a checkpoint recovery, then wait for the next step
-                                    /// to be empty
-                                    if (c_req.getIsFromAnotherCheckpoint() == 0) {
-                                        dag.waitForNextStageToBeFree(src_task_id);
-                                        dag.moveForwardWithComputation(comp_id);
+                                        /// If it's not the result of a checkpoint recovery, then wait for the next step
+                                        /// to be empty
+                                        if (c_req.getIsFromAnotherCheckpoint() == 0) {
+                                            dag.waitForNextStageToBeFree(src_task_id);
+                                            dag.moveForwardWithComputation(comp_id);
+                                        }
+
+                                        /// Send the flushing request to the appropriate worker manager
+                                        var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
+                                                .collect(Collectors.toList());
+                                        Set<Long> wm_ids = new HashSet<>();
+                                        for (Set<Long> wms : wm_sets) {
+                                            wm_ids.addAll(wms);
+                                        }
+
+                                        wm_ids.forEach(wm -> {
+                                            var w = workers.get(wm);
+                                            w.flush(comp_id, grps);
+                                        });
                                     }
-
-                                    /// Send the flushing request to the appropriate worker manager
-                                    var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
-                                            .collect(Collectors.toList());
-                                    Set<Long> wm_ids = new HashSet<>();
-                                    for (Set<Long> wms : wm_sets) {
-                                        wm_ids.addAll(wms);
-                                    }
-
-                                    wm_ids.forEach(wm -> {
-                                        var w = workers.get(wm);
-                                        w.flush(comp_id, grps);
-                                    });
+                                } catch (Throwable t) {
+                                    t.printStackTrace();
                                 }
                             });
                         } else if (req.hasFlushResponse()) {

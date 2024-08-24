@@ -621,10 +621,6 @@ public class ManageDAG {
      * @return true when the checkpoint is completed, thus it holds all the data
      */
     public boolean saveCheckpoint(CheckpointRequest checkpointRequest) {
-        if (checkpointRequest.getIsFromAnotherCheckpoint() != 0) {
-            return true;
-        }
-
         var comp = running_computations.get(checkpointRequest.getComputationId());
         assert comp != null : checkpointRequest.getComputationId() + " " + checkpointRequest.getSourceTaskId()
                 + " should exist. Got " + running_computations;
@@ -633,6 +629,10 @@ public class ManageDAG {
         assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint";
         assert grp <= comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
                 + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
+
+        if (checkpointRequest.getIsFromAnotherCheckpoint() != 0) {
+            return true;
+        }
 
         /// Skips the last since it can't be a checkpoint by definition
         while (comp.current_checkpoint_group < getNumberOfGroups() && grp != comp.current_checkpoint_group) {
@@ -668,6 +668,7 @@ public class ManageDAG {
         comp.last_checkpoint = comp.current_checkpoint;
         comp.last_checkpoint_group = comp.current_checkpoint_group;
         comp.current_checkpoint_group += checkpointInterval;
+        comp.current_checkpoint = DataRequest.newBuilder();
         comp.fragments_received.clear();
 
         releaseLocks(comp_id);

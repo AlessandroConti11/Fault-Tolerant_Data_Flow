@@ -39,9 +39,7 @@ public class RequestBuilder {
         public Vector<DataResponse> getResponses() {
             return responses.stream().map(fut -> {
 				try {
-					var f = fut.get();
-                    System.out.println("FUT " +  f);
-                    return f;
+					return fut.get();
 				} catch (InterruptedException | ExecutionException e) {
 					e.printStackTrace();
 				}

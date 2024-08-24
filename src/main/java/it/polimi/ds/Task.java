@@ -138,8 +138,8 @@ class Task {
     public synchronized void restartFromCheckpoint(DataRequest req) {
         dont_send_back_checkpoint = false;
 
-        if (req.getSourceRole() == Role.MANAGER) {
-            assert data_count == 0 : "Received checkpoint while in the middle of a running computation";
+        if (req.getSourceRole() == Role.MANAGER || !hasAlreadyComputed()) {
+            assert data_count == 0 && data.size() == 0: "Received checkpoint while in the middle of a running computation";
 
             already_computed = true;
             dont_send_back_checkpoint = true;

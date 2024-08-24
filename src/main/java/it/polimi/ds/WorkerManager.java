@@ -386,6 +386,7 @@ public class WorkerManager {
                             Task t = getTask(req.getTaskId());
                             assert t != null : "Unknown task id expected: " + tasks + " got: " + req.getTaskId();
 
+                            assert req.getDataCount() <= 2; // TODO REMOVE THIS
                             if (!req.hasCrashedGroup()) {
                                 t.addData(req);
                             } else {
@@ -399,7 +400,7 @@ public class WorkerManager {
                     iter.remove();
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             e.printStackTrace();
         }
     });
