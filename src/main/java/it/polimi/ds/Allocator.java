@@ -34,7 +34,7 @@ public class Allocator {
                     try {
                         var req = conn.receive(AllocateNodeManagerRequest.class);
                         if (req.hasCoordinator() && req.getCoordinator() == true) {
-                            int procId = procCounter.addAndGet(1);
+                            int procId = procCounter.addAndGet(2);
                             Process proc = process_builder
                                     .command("java", "-ea", "-jar", "target/coordinator.jar", Integer.toString(procId))
                                     .redirectOutput(ProcessBuilder.Redirect.PIPE)
@@ -45,7 +45,8 @@ public class Allocator {
                             BufferedReader reader = new BufferedReader(
                                     new InputStreamReader(proc.getInputStream()));
 
-                            String line = reader.readLine();
+                            System.out.println(line);
+
                             Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
 
                             conn.send(AllocateNodeManagerResponse.newBuilder()

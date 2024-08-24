@@ -196,6 +196,10 @@ public class Coordinator {
         try {
             /// Wait for a client to connect
             ServerSocket client_listener = new ServerSocket(PID + CLIENT_PORT);
+
+            /// WARNING: This has to be the first thing that the coordinator prints
+            /// This sends the address back to the host process
+            System.out.println("ADDRESS::" + Address.getOwnAddress().withPort(PID + CLIENT_PORT));
             Node client = new Node(client_listener.accept());
 
             /// Receive from the client the allocation request that will contian the number
@@ -714,9 +718,6 @@ public class Coordinator {
 
     public static void main(String[] args) throws SocketException {
         PID = Integer.parseInt(args[0]) % 60_000;
-
-        /// This sends the address back to the host process
-        System.out.println("ADDRESS::" + Address.getOwnAddress().withPort(PID + CLIENT_PORT));
 
         Coordinator coord = new Coordinator();
         coord.start();
