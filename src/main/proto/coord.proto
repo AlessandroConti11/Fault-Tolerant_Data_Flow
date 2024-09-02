@@ -68,6 +68,7 @@ message CheckpointResponse {}
 message RegisterNodeManagerRequest {
   ProtoAddress address = 1;
   int32 task_slots = 2;
+  int64 allocator_id = 3;
 }
 
 message SynchRequest {}

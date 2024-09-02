@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,7 +21,9 @@ public class Allocator {
 
     private static List<Process> procs = new Vector<>();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
+        final long ID = SecureRandom.getInstanceStrong().nextLong();
+
         try (ServerSocket listener = new ServerSocket(PORT)) {
 
             System.out.println("Server is running on " + Address.getOwnAddress().withPort(PORT).toString());
@@ -62,7 +66,8 @@ public class Allocator {
 
                                 Process proc = process_builder
                                         .command("java", "-ea", "-jar", "target/workers.jar",
-                                                new Address(info.getAddress()).toString(), Integer.toString(procId))
+                                                new Address(info.getAddress()).toString(), Integer.toString(procId),
+                                                Long.toString(ID))
                                         .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                         .start();
 

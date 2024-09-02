@@ -91,7 +91,9 @@ public class WorkerManager {
     }
 
     public WorkerManager(String[] args) throws IOException {
-        int PID = Integer.parseInt(args[1]);
+        final int PID = Integer.parseInt(args[1]);
+        final long ALLOCATOR_ID = Long.parseLong(args[2]);
+
         System.out.println("args: " + Arrays.toString(args));
         coordinator_address = Address.fromString(args[0]).getValue0();
         coordinator = new Node(coordinator_address);
@@ -99,6 +101,7 @@ public class WorkerManager {
         coordinator.send(RegisterNodeManagerRequest.newBuilder()
                 .setAddress(Address.getOwnAddress().withPort(PID + WorkerManager.DATA_PORT).toProto())
                 .setTaskSlots(TASK_SLOTS)
+                .setAllocatorId(ALLOCATOR_ID)
                 .build());
 
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);

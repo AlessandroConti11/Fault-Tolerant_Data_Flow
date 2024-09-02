@@ -2,6 +2,7 @@ package it.polimi.ds;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
@@ -91,10 +92,24 @@ public class Coordinator {
         }
     }
 
-    public void startWorker() {
-        workerListener.start();
-        heartbeat.start();
-    }
+    Thread workerListener = new Thread(() -> {
+        try {
+            System.out.println(PID + WORKER_PORT);
+            ServerSocket workerListener = new ServerSocket(PID + WORKER_PORT);
+            while (true) {
+                Node node = new Node(workerListener.accept());
+
+                just_connected.addAndGet(1);
+                synchronized (just_connected) {
+                    just_connected.notifyAll();
+                }
+                var wm_handler = new WorkerManagerHandler(node);
+                exe.submit(wm_handler);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    });
 
     Thread heartbeat = new Thread(() -> {
         Object lock = new Object();
@@ -107,7 +122,7 @@ public class Coordinator {
             while (!closing) {
                 synchronized (lock) {
                     for (var worker : workers.entrySet()) {
-                        boolean alive = worker.getValue().checkAlive();
+                        boolean alive = worker.getValue().isAlive();
                         if (!alive) {
                             dag.addFreeTaskManager((int) (long) worker.getKey());
                             workers.remove(worker.getKey());
@@ -118,7 +133,15 @@ public class Coordinator {
 
                 if (crashed.size() > 0) {
                     System.out.println("Trying to allocate " + crashed.size());
-                    allocateResources(crashed.size());
+
+                    crashed.parallelStream().forEach(crashed_id -> {
+                        try {
+                            allocateResources(dag, 1, crashed_id);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    });
+
                     System.out.println("Allocated");
                     /// Wait until all the workers are ready, then, once we have collected all the
                     /// network information, notify the WorkerManagers of all the others' addresses
@@ -144,7 +167,8 @@ public class Coordinator {
                         });
                     } else if (alloc_future != null && alloc_future.state() == Future.State.RUNNING) {
                         int ready = workers.entrySet().stream().map(e -> e.getValue())
-                                .mapToInt(e -> e.isReady() ? 1 : 0).sum();
+                                .mapToInt(e -> e.isReady() ? 1 : 0)
+                                .sum();
                         System.out.println("Still waiting " + dag.getNumberOfTaskManager() + " got " + ready + " size: "
                                 + workers.size());
 
@@ -211,7 +235,8 @@ public class Coordinator {
             /// Create the schedule of the program using a DAG
             program = allocation_request.getRawProgram();
             try {
-                dag = new ManageDAG(program, allocation_request.getNumberOfAllocations());
+                dag = new ManageDAG(program, allocation_request.getNumberOfAllocations(),
+                        allocation_request.getAllocatorsCount());
             } catch (Exceptions.MalformedProgramFormatException e) {
                 client.send(AllocationResponse.newBuilder()
                         .setCode(ReturnCode.INVALID_PROGRAM)
@@ -228,13 +253,14 @@ public class Coordinator {
                 System.exit(0);
             }
 
-            startWorker();
-
             /// Allocate the WokerManagers on the appropriate allocators
             allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
                     .collect(Collectors.toList());
 
-            allocateResources(dag.getNumberOfTaskManager());
+            workerListener.start();
+            heartbeat.start();
+
+            allocateResources(dag, dag.getNumberOfTaskManager());
             /// Wait until all the workers are ready, then, once we have collected all the
             /// network information, notify the WorkerManagers of all the others' addresses
             workers.forEach((k, v) -> {
@@ -367,29 +393,6 @@ public class Coordinator {
         });
     }
 
-    Thread workerListener = new Thread(() -> {
-        try {
-            System.out.println(PID + WORKER_PORT);
-            ServerSocket workerListener = new ServerSocket(PID + WORKER_PORT);
-            while (true) {
-                Node node = new Node(workerListener.accept());
-                /// TODO: Handle this case, in theory it should never happen, but you never
-                /// know.
-                /// This happens when we initialize to many workerManagers somehow
-                long id = dag.getNextFreeTaskManager().orElseThrow();
-
-                just_connected.addAndGet(1);
-                synchronized (just_connected) {
-                    just_connected.notifyAll();
-                }
-                workers.put(id, new WorkerManagerHandler(node, id));
-                exe.submit(workers.get(id));
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    });
-
     class ResultBuilder {
         private DataResponse.Builder resp_aggregator = DataResponse.newBuilder();
         private final int max_data_count;
@@ -482,11 +485,14 @@ public class Coordinator {
         private long id;
         private Address address;
 
-        public WorkerManagerHandler(Node conn, long id) throws IOException {
+        public WorkerManagerHandler(Node conn) throws IOException {
             this.control_connection = conn;
-            this.id = id;
 
+            /// TODO: Handle this case, in theory it should never happen, but you never
+            /// know. This happens when we initialize to many workerManagers somehow
             var registration = conn.receive(RegisterNodeManagerRequest.class);
+            this.id = dag.getNextFreeTaskManager(registration.getAllocatorId()).orElseThrow();
+
             this.address = new Address(registration.getAddress());
 
             List<Long> tasks = dag.getTasksOfTaskManager((int) id);
@@ -550,9 +556,10 @@ public class Coordinator {
             data_connection = new Node(address);
 
             alive = true;
+            workers.put(this.id, this);
         }
 
-        public boolean checkAlive() {
+        public boolean isAlive() {
             return alive;
         }
 
@@ -703,16 +710,19 @@ public class Coordinator {
 
     }
 
-    void allocateResources(int requestedWorkers) throws IOException {
-        Node h = new Node(allocators.get(0));
+    private void allocateResources(ManageDAG dag, int requested_workers, Address allocator) throws IOException {
+        assert requested_workers > 0;
+
+        Node h = new Node(allocator);
+
         h.send(AllocateNodeManagerRequest.newBuilder()
                 .setNodeManagerInfo(NodeManagerInfo.newBuilder()
                         .setAddress(Address.getOwnAddress().withPort(PID + WORKER_PORT).toProto())
-                        .setNumContainers(requestedWorkers).build())
+                        .setNumContainers(requested_workers).build())
                 .build());
 
         var resp = h.receive(AllocateNodeManagerResponse.class);
-        while (just_connected.getAcquire() < requestedWorkers) {
+        while (just_connected.getAcquire() < requested_workers) {
             try {
                 synchronized (just_connected) {
                     just_connected.wait();
@@ -722,7 +732,25 @@ public class Coordinator {
             }
         }
 
-        just_connected.addAndGet(-requestedWorkers);
+        just_connected.addAndGet(-requested_workers);
+    }
+
+    private void allocateResources(ManageDAG dag, int requested_workers, long wm_id) throws IOException {
+        final int index = (int) ((allocators.size() / dag.getNumberOfTaskManager()) * wm_id);
+
+        allocateResources(dag, requested_workers, allocators.get(index));
+    }
+
+    private void allocateResources(ManageDAG dag, int requested_workers) throws IOException {
+        final int flat_requested_number = dag.getNumberOfTaskManager() / allocators.size();
+        final int remainder = dag.getNumberOfTaskManager() % allocators.size();
+
+        for (int i = 0; i < allocators.size(); i++) {
+            final int divided_requested_workers = flat_requested_number
+                    + (i < remainder ? 1 : 0);
+
+            allocateResources(dag, divided_requested_workers, allocators.get(i));
+        }
     }
 
     void waitAllocatedWorkers(int requestedWorkers) {

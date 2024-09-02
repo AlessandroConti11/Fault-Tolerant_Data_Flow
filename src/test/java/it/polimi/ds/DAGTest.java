@@ -23,7 +23,7 @@ public class DAGTest {
     public void empytProgram() {
         /// Empty program should just return the input values without any changes
         assertDoesNotThrow(() -> {
-            new ManageDAG(ByteString.copyFromUtf8(""), 1);
+            new ManageDAG(ByteString.copyFromUtf8(""), 1, 1);
         });
     }
 
@@ -31,7 +31,7 @@ public class DAGTest {
     public void noWorkerManagers() {
         /// No WorkerManager able to execute the program
         assertThrowsExactly(Exceptions.NotEnoughResourcesException.class, () -> {
-            new ManageDAG(ByteString.copyFromUtf8("map;add;1"), 0);
+            new ManageDAG(ByteString.copyFromUtf8("map;add;1"), 0, 1);
         });
     }
 
@@ -40,7 +40,7 @@ public class DAGTest {
         /// Not enough resources to execute the program
         assertThrowsExactly(Exceptions.NotEnoughResourcesException.class, () -> {
             String program = "change_key;add;1\nchange_key;add;1\nchange_key;add;1\nchange_key;add;1\nchange_key;add;1\nchange_key;add;1";
-            new ManageDAG(ByteString.copyFromUtf8(program), 1);
+            new ManageDAG(ByteString.copyFromUtf8(program), 1, 1);
         });
     }
 
@@ -49,27 +49,27 @@ public class DAGTest {
         /// Not enough resources to execute the program
         assertDoesNotThrow(() -> {
             String program = "change_key;add;1\nchange_key;add;1\nchange_key;add;1\nchange_key;add;1\nchange_key;add;1\n";
-            new ManageDAG(ByteString.copyFromUtf8(program), 1);
+            new ManageDAG(ByteString.copyFromUtf8(program), 1, 1);
         });
     }
 
     @Test
     public void freeWorkerManagers() throws Exception {
-        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8("map;add;1"), 5);
+        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8("map;add;1"), 5, 1);
         assertDoesNotThrow(() -> {
-            assertEquals(4L, dag.getNextFreeTaskManager().get());
-            assertEquals(3L, dag.getNextFreeTaskManager().get());
-            assertEquals(2L, dag.getNextFreeTaskManager().get());
-            assertEquals(1L, dag.getNextFreeTaskManager().get());
-            assertEquals(0L, dag.getNextFreeTaskManager().get());
+            assertEquals(4L, dag.getNextFreeTaskManager(0).get());
+            assertEquals(3L, dag.getNextFreeTaskManager(0).get());
+            assertEquals(2L, dag.getNextFreeTaskManager(0).get());
+            assertEquals(1L, dag.getNextFreeTaskManager(0).get());
+            assertEquals(0L, dag.getNextFreeTaskManager(0).get());
         });
         assertThrowsExactly(NoSuchElementException.class, () -> {
-            dag.getNextFreeTaskManager().get();
+            dag.getNextFreeTaskManager(0).get();
         });
 
         dag.addFreeTaskManager(3);
         assertDoesNotThrow(() -> {
-            assertEquals(3L, dag.getNextFreeTaskManager().get());
+            assertEquals(3L, dag.getNextFreeTaskManager(0).get());
         });
 
         /// Can't re-add a WorkerManager that doesn't exist
@@ -77,6 +77,15 @@ public class DAGTest {
             dag.addFreeTaskManager(15);
         });
 
+        ManageDAG dag2 = new ManageDAG(ByteString.copyFromUtf8("map;add;1"), 5, 2);
+
+        assertDoesNotThrow(() -> {
+            assertEquals(4L, dag2.getNextFreeTaskManager(1).get());
+            assertEquals(3L, dag2.getNextFreeTaskManager(1).get());
+            assertEquals(2L, dag2.getNextFreeTaskManager(0).get());
+            assertEquals(1L, dag2.getNextFreeTaskManager(0).get());
+            assertEquals(0L, dag2.getNextFreeTaskManager(0).get());
+        });
     }
 
     @Test
@@ -90,7 +99,7 @@ public class DAGTest {
                 + "\nchange_key;add;1"
                 + "\nchange_key;add;1";
 
-        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4, 1);
 
         var ops = dag.getOperationsGroup();
         assertEquals(8, ops.size());
@@ -105,7 +114,7 @@ public class DAGTest {
                 + "\nchange_key;add;1"
                 + "\nreduce;add;1";
 
-        dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+        dag = new ManageDAG(ByteString.copyFromUtf8(program), 4, 1);
 
         ops = dag.getOperationsGroup();
         assertEquals(8, ops.size());
@@ -116,7 +125,7 @@ public class DAGTest {
         String program = "change_key;add;1"
                 + "\nchange_key;add;1";
 
-        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4, 1);
 
         assertEquals(10, dag.getMaxTasksPerGroup());
         assertEquals(20, dag.getNumberOfTask());
@@ -132,7 +141,7 @@ public class DAGTest {
         program = "change_key;add;1"
                 + "\nchange_key;add;1";
 
-        dag = new ManageDAG(ByteString.copyFromUtf8(program), 3);
+        dag = new ManageDAG(ByteString.copyFromUtf8(program), 3, 1);
         assertEquals(7, dag.getMaxTasksPerGroup());
         assertEquals(14, dag.getNumberOfTask());
         for (int i = 0; i < 3; i++) {
@@ -150,7 +159,7 @@ public class DAGTest {
         String program = "change_key;add;1"
                 + "\nchange_key;add;1";
 
-        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4);
+        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 4, 1);
         assertEquals(0, dag.groupFromTask(0).get());
         assertEquals(1, dag.groupFromTask(10).get());
         assertEquals(Optional.empty(), dag.groupFromTask(20));
@@ -165,7 +174,7 @@ public class DAGTest {
                 "filter;not_equal;19\n" +
                 "change_key;add;75";
 
-        dag = new ManageDAG(ByteString.copyFromUtf8(program), 2);
+        dag = new ManageDAG(ByteString.copyFromUtf8(program), 2, 1);
         assertEquals(0, dag.groupFromTask(0).get());
         assertEquals(1, dag.groupFromTask(3).get());
         assertEquals(2, dag.groupFromTask(6).get());
@@ -194,7 +203,7 @@ public class DAGTest {
                 "filter;not_equal;19\n" +
                 "change_key;add;75";
 
-        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 2);
+        ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 2, 1);
 
         long comp_id = dag.newComputation(List.of(Data.newBuilder().setKey(0).setValue(0).build()));
         assertEquals(0, comp_id);
@@ -343,7 +352,7 @@ public class DAGTest {
                 "filter;not_equal;19\n" +
                 "change_key;add;75";
 
-        final ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 2);
+        final ManageDAG dag = new ManageDAG(ByteString.copyFromUtf8(program), 2, 1);
         final int num_of_grps = dag.getNumberOfGroups();
         final int check_interval = dag.getCheckpointInterval();
         for (int i = 0; i < num_of_grps - 1; i++) {

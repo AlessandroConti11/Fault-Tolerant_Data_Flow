@@ -114,7 +114,9 @@ public class ManageDAG {
     /**
      * Constructor
      */
-    public ManageDAG(ByteString program, int numberOftasksManagers) throws Exception {
+    public ManageDAG(ByteString program, int numberOftasksManagers, int num_of_allocators) throws Exception {
+        this.num_of_allocators = num_of_allocators;
+
         if (!ManageCSVfile.checkCSVoperator(program)) {
             throw new Exceptions.MalformedProgramFormatException();
         }
@@ -494,9 +496,52 @@ public class ManageDAG {
 
     }
 
-    public Optional<Long> getNextFreeTaskManager() {
+    private Map<Long, Long> allocators_wm_map = new ConcurrentHashMap<>();
+    private final int num_of_allocators;
+
+    public long getAllocatorOfManager(long wm_id) {
+        return allocators_wm_map.entrySet().stream()
+                .filter(e -> e.getValue() >= wm_id && wm_id > e.getValue() - num_of_allocators)
+                .map(e -> e.getKey())
+                .findFirst()
+                .get();
+    }
+
+    private boolean isInAllocatorsRange(long id) {
+        return allocators_wm_map.entrySet().stream()
+                .map(e -> e.getValue())
+                .filter(wm_id -> wm_id >= id && id > wm_id - num_of_allocators)
+                .findFirst()
+                .isPresent();
+    }
+
+    public Optional<Long> getNextFreeTaskManager(long allocator_id) {
         if (freeTaskManagers.size() > 0) {
-            return Optional.of(freeTaskManagers.remove(freeTaskManagers.size() - 1));
+            if (!allocators_wm_map.containsKey(allocator_id)) {
+                final long new_id = freeTaskManagers.stream()
+                        .filter(free -> !isInAllocatorsRange(free))
+                        .reduce((first, second) -> second)
+                        .get();
+
+                allocators_wm_map.put(allocator_id, new_id);
+                freeTaskManagers.removeElement(new_id);
+
+                return Optional.of(new_id);
+            }
+
+            final long base = allocators_wm_map.get(allocator_id);
+            long new_id = -1;
+            for (long i = base; i >= base - (numberOfTaskManager / num_of_allocators); i--) {
+                if (freeTaskManagers.contains(i)) {
+                    new_id = i;
+                    freeTaskManagers.removeElement(i);
+                    break;
+                }
+            }
+
+            assert new_id != -1 : "Tried to start a new worker manager when there is no need to";
+
+            return Optional.of(new_id);
         }
 
         return Optional.empty();
