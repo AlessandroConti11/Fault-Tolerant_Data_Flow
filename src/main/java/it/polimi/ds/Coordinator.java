@@ -22,6 +22,9 @@ import com.google.protobuf.ByteString;
 
 import it.polimi.ds.CSV.ManageCSVfile;
 import it.polimi.ds.Directed_Acyclic_Graph.ManageDAG;
+import it.polimi.ds.function.Function;
+import it.polimi.ds.function.Operator;
+import it.polimi.ds.function.OperatorName;
 import it.polimi.ds.proto.AllocateNodeManagerRequest;
 import it.polimi.ds.proto.AllocateNodeManagerResponse;
 import it.polimi.ds.proto.AllocationRequest;
@@ -49,6 +52,7 @@ import it.polimi.ds.proto.SynchResponse;
 import it.polimi.ds.proto.UpdateNetworkRequest;
 import it.polimi.ds.proto.UpdateNetworkResponse;
 import it.polimi.ds.proto.WorkerManagerRequest;
+import org.javatuples.Pair;
 
 public class Coordinator {
 
@@ -217,7 +221,7 @@ public class Coordinator {
                 System.exit(0);
             } catch (Exceptions.NotEnoughResourcesException e) {
                 client.send(AllocationResponse.newBuilder()
-                        .setCode(ReturnCode.INVALID_PROGRAM)
+                        .setCode(ReturnCode.NOT_ENOUGH_RESOURCES)
                         .build());
 
                 client.close();
@@ -429,7 +433,35 @@ public class Coordinator {
                 }
             }
 
-            /// TODO: MAKE LAST REDUCE
+
+            //The position of the last operation to compute
+            int lastReduce = dag.getOperationsGroup().size();
+
+            //The last reduce - if needed
+            if (dag.getOperationsGroup().get(lastReduce - 1).get(0).getValue0().equals(OperatorName.REDUCE)) {
+                //The final data computed from the worker.
+                List<Pair<Integer, Integer>> finalData = ManageCSVfile.readCSVinput(resp_aggregator.getDataList());
+
+                //Compute the last reduce.
+                Operator operator = new Operator();
+                finalData = operator.operations(dag.getOperationsGroup().get(lastReduce - 1), finalData);
+
+                //The data after the reduce
+                DataResponse.Builder dataResponse = DataResponse.newBuilder();
+                dataResponse
+                        .setComputationId(resp_aggregator.getComputationId())
+                        .setSourceTask(resp_aggregator.getSourceTask())
+                        .addAllData(finalData.stream()
+                                .map(p -> Data.newBuilder()
+                                        .setKey(p.getValue0())
+                                        .setValue(p.getValue1())
+                                        .build())
+                                .toList())
+                        .build();
+
+                System.out.println("Sending back results for " + dataResponse.getDataList());
+                return dataResponse.build();
+            }
 
             System.out.println("Sending back results for " + resp_aggregator.getComputationId());
             return resp_aggregator.build();

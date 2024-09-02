@@ -102,7 +102,7 @@ public class RequestBuilder {
     }
 
     public Request allocate() {
-        System.out.println("Allocating resources" + allocators.get(0));
+        System.out.println("Allocating resources " + allocators.get(0));
         Node allocator = new Node(allocators.get(0));
         Address coordinator_address = null;
         try {
@@ -130,6 +130,8 @@ public class RequestBuilder {
             var allocation_resp = coordinator.receive(AllocationResponse.class);
             switch (allocation_resp.getCode()) {
                 case INVALID_PROGRAM:
+                    throw new RuntimeException("The provided program is malformed -- " + allocation_resp.getCode());
+                case NOT_ENOUGH_RESOURCES:
                     throw new RuntimeException("The provided program is malformed -- " + allocation_resp.getCode());
 
                 case OK:

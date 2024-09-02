@@ -8,6 +8,7 @@ import "addr.proto";
 enum ReturnCode {
   OK = 0;
   INVALID_PROGRAM = 1;
+  NOT_ENOUGH_RESOURCES = 2;
 }
 
 enum Role {

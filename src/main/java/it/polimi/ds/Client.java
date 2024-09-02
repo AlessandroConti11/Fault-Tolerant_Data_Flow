@@ -137,9 +137,6 @@ public class Client {
 
             request.close();
 
-            System.out.println("\n\nThe result:");
-            request.getResponses().forEach(System.out::println);
-
             System.out.println("Do you want to continue? (y/n)");
             if (scanner.nextLine().toLowerCase().equals("n")) {
                 break;
@@ -167,7 +164,8 @@ public class Client {
                         "filter;not_equal;11\n" +
                         "map;mult;77\n" +
                         "filter;not_equal;19\n" +
-                        "change_key;add;75" +
+                        "change_key;add;75\n" +
+                        "reduce;add;40\n" +
                         ""))
                 .addAllocators(Arrays.asList(args).stream()
                         .map(Address::fromStringIp)
