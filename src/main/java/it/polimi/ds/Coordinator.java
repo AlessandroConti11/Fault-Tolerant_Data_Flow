@@ -94,7 +94,7 @@ public class Coordinator {
 
     Thread workerListener = new Thread(() -> {
         try {
-            System.out.println(PID + WORKER_PORT);
+//            System.out.println(PID + " " + WORKER_PORT);
             ServerSocket workerListener = new ServerSocket(PID + WORKER_PORT);
             while (true) {
                 Node node = new Node(workerListener.accept());
@@ -132,7 +132,7 @@ public class Coordinator {
                 }
 
                 if (crashed.size() > 0) {
-                    System.out.println("Trying to allocate " + crashed.size());
+                    System.out.println("Trying to allocate " + crashed.size() + "resources");
 
                     crashed.parallelStream().forEach(crashed_id -> {
                         try {
@@ -157,7 +157,7 @@ public class Coordinator {
                     if (alloc_future == null) {
                         alloc_future = hb_executor.submit(() -> {
                             waitAllocatedWorkers(dag.getNumberOfTaskManager());
-                            System.out.println("Network ready");
+                            System.out.println("Start heartbeat");
 
                             synchronized (workers) {
                                 /// Let go of all the locks that are waiting for the network to be ready
@@ -253,8 +253,8 @@ public class Coordinator {
                 System.exit(0);
             }
 
-            /// Allocate the WokerManagers on the appropriate allocators
-            allocators = allocation_request.getAllocatorsList().stream().map(a -> new Address(a))
+            /// Allocate the WorkerManagers on the appropriate allocators
+            allocators = allocation_request.getAllocatorsList().stream().map(Address::new)
                     .collect(Collectors.toList());
 
             workerListener.start();
@@ -275,7 +275,7 @@ public class Coordinator {
             client.send(AllocationResponse.newBuilder()
                     .build());
 
-            System.out.println("Network ready");
+//            System.out.println("Client Network ready");
 
             while (true) {
                 try {
@@ -292,6 +292,7 @@ public class Coordinator {
                             var data = dag.getDataRequestsForGroup(comp_id, 0);
 
                             System.out.println("Sending over computation " + comp_id);
+                            //computation workers + last reduce
                             sendComputation(data, 0, comp_id);
 
                             try {
@@ -418,7 +419,7 @@ public class Coordinator {
 
             resp_aggregator.addAllData(r.getDataList());
             fragments.add(r.getSourceTask());
-            System.out.println("fragments : " + fragments + " max : " + max_data_count);
+//            System.out.println("fragments : " + fragments + " max : " + max_data_count);
             if (fragments.size() >= max_data_count) {
                 synchronized (lock) {
                     lock.notifyAll();
@@ -462,11 +463,13 @@ public class Coordinator {
                                 .toList())
                         .build();
 
-                System.out.println("Sending back results for " + dataResponse.getDataList());
+//                System.out.println("Sending back results for " + dataResponse.getDataList());
+                System.out.println("Sending back results");
                 return dataResponse.build();
             }
 
-            System.out.println("Sending back results for " + resp_aggregator.getComputationId());
+//            System.out.println("Sending back results for " + resp_aggregator.getComputationId());
+            System.out.println("Sending back results");
             return resp_aggregator.build();
         }
     }
@@ -506,8 +509,8 @@ public class Coordinator {
 
             var operations = dag.getOperationsForTaskManager(id);
 
-            System.out.println("max task" + dag.getMaxTasksPerGroup());
-            System.out.println("ID " + id);
+//            System.out.println("max task" + dag.getMaxTasksPerGroup());
+//            System.out.println("ID " + id);
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
                     .addAllTasks(tasks.stream()
@@ -550,8 +553,8 @@ public class Coordinator {
             conn.receive(SynchRequest.class);
             conn.send(SynchResponse.newBuilder().build());
 
-            System.out.println("Data connection with " + id + " opened on "
-                    + address);
+//            System.out.println("Data connection with " + id + " opened on "
+//                    + address);
 
             data_connection = new Node(address);
 
@@ -610,11 +613,11 @@ public class Coordinator {
 
         @Override
         public void run() {
-            System.out.println("Worker manager connected");
+//            System.out.println("Worker manager connected");
 
             try {
                 while (alive) {
-                    System.out.println("-----Contorl thread " + id);
+//                    System.out.println("-----Control thread " + id);
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
@@ -631,7 +634,7 @@ public class Coordinator {
                                         long comp_id = c_req.getComputationId();
                                         long src_task_id = c_req.getSourceTaskId();
 
-                                        System.out.println("Flushing comp " + comp_id);
+                                        System.out.println("Flushing computation " + comp_id);
                                         var grps = dag.getStageFromTask(src_task_id);
 
                                         /// If it's not the result of a checkpoint recovery, then wait for the next step
@@ -667,7 +670,7 @@ public class Coordinator {
                             flushin_comp.remove(f_resp.getComputationId());
                             dag.releaseLocks(f_resp.getComputationId());
                         } else if (req.hasResult()) {
-                            assert is_last : "Got a writeback from a non-last manager";
+                            assert is_last : "Got a write back from a non-last manager";
 
                             exe.submit(() -> {
                                 try {
@@ -754,8 +757,7 @@ public class Coordinator {
     }
 
     void waitAllocatedWorkers(int requestedWorkers) {
-        int ready = workers.entrySet().stream()
-                .map(e -> e.getValue())
+        int ready = workers.values().stream()
                 .mapToInt(e -> e.isReady() ? 1 : 0)
                 .sum();
 
@@ -766,8 +768,7 @@ public class Coordinator {
                 e.printStackTrace();
             }
 
-            ready = workers.entrySet().stream()
-                    .map(e -> e.getValue())
+            ready = workers.values().stream()
                     .mapToInt(e -> e.isReady() ? 1 : 0)
                     .sum();
         }

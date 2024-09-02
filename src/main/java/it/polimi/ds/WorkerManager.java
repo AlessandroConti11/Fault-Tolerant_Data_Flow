@@ -66,7 +66,7 @@ public class WorkerManager {
      * @return the task that has the requested id.
      */
     Task getTask(long taskId) {
-        System.out.println("Ask for " + taskId + " have " + tasks.stream().map(t -> t.getId()).toList());
+//        System.out.println("Ask for task " + taskId + " that have " + tasks.stream().map(Task::getId).toList());
         for (Task task : tasks) {
             if (task.getId() == taskId) {
                 return task;
@@ -94,7 +94,7 @@ public class WorkerManager {
         final int PID = Integer.parseInt(args[1]);
         final long ALLOCATOR_ID = Long.parseLong(args[2]);
 
-        System.out.println("args: " + Arrays.toString(args));
+//        System.out.println("args: " + Arrays.toString(args));
         coordinator_address = Address.fromString(args[0]).getValue0();
         coordinator = new Node(coordinator_address);
 
@@ -107,17 +107,17 @@ public class WorkerManager {
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
 
-        System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
+//        System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
 
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
-        System.out.println("grp size" + group_size);
+//        System.out.println("grp size" + group_size);
 
         data_listener = ServerSocketChannel.open();
         data_listener.bind(new InetSocketAddress(PID + WorkerManager.DATA_PORT));
         data_listener.configureBlocking(false);
 
-        System.out.println("DataConnection is listeninng on "
+        System.out.println("DataConnection is listening on "
                 + Address.getOwnAddress().withPort(PID + WorkerManager.DATA_PORT));
 
         data_communicator.start();
@@ -144,7 +144,7 @@ public class WorkerManager {
 
     public void processTask(Task task) {
         task.waitForData();
-        System.out.println("Processing tid:" + task.getId());
+        System.out.println("Processing task id: " + task.getId());
         FaultyThread.maybeCrash();
 
         synchronized (task) {
@@ -181,7 +181,7 @@ public class WorkerManager {
                 while (true) {
                     try {
                         Node conn = new Node(successor);
-                        System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
+//                        System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
 
                         if (task.isCheckpoint()) {
                             writeBackCheckpoint(coordinator, task);
@@ -294,13 +294,15 @@ public class WorkerManager {
             if (req.hasFlushRequest()) {
                 var f_req = req.getFlushRequest();
 
-                System.out.println("Flushing " + f_req.getGroupsIdList());
+                System.out.println("Flushing groups: " + f_req.getGroupsIdList().stream()
+                                                                                .sorted()
+                                                                                .toList());
 
                 List<Task> tt = tasks.stream()
                         .filter(t -> f_req.getGroupsIdList().contains(t.getGroupId()))
-                        .collect(Collectors.toList());
+                        .toList();
 
-                System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).collect(Collectors.toList()));
+//                System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).toList());
 
                 tt.forEach(t -> t.flushComputation((long) f_req.getComputationId()));
 
@@ -326,7 +328,7 @@ public class WorkerManager {
                 continue;
             }
 
-            System.out.println("Received control request");
+//            System.out.println("Received control request");
             assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle: " + req;
             synchronized (network_nodes) {
                 var network_change = req.getUpdateNetworkRequest();
@@ -337,7 +339,7 @@ public class WorkerManager {
                     network_nodes.put(ids.get(i), new Address(nodes.get(i)));
                 }
 
-                System.out.println("Network updated");
+//                System.out.println("Network updated");
             }
             try {
                 coordinator.send(UpdateNetworkResponse.newBuilder().build());
@@ -350,7 +352,7 @@ public class WorkerManager {
                 network_nodes.notifyAll();
             }
 
-            System.out.println("network " + network_nodes);
+//            System.out.println("network " + network_nodes);
         }
 
         System.out.println("Bye bye");
@@ -385,7 +387,7 @@ public class WorkerManager {
                             assert req.getSourceRole() == Role.MANAGER || req.getSourceRole() == Role.WORKER
                                     : "Got message from unexpected source";
 
-                            System.out.println(req.getSourceRole());
+//                            System.out.println("role: " + req.getSourceRole());
                             Task t = getTask(req.getTaskId());
                             assert t != null : "Unknown task id expected: " + tasks + " got: " + req.getTaskId();
 

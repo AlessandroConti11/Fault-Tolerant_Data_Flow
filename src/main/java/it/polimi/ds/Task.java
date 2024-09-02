@@ -97,7 +97,7 @@ class Task {
             return;
         }
 
-        assert has_all_data == false;
+        assert !has_all_data;
         assert data_count < group_size;
 
         if (data_count == 0)
@@ -139,7 +139,7 @@ class Task {
         dont_send_back_checkpoint = false;
 
         if (req.getSourceRole() == Role.MANAGER || !hasAlreadyComputed()) {
-            assert data_count == 0 && data.size() == 0: "Received checkpoint while in the middle of a running computation";
+            assert data_count == 0 && data.isEmpty() : "Received checkpoint while in the middle of a running computation";
 
             already_computed = true;
             dont_send_back_checkpoint = true;

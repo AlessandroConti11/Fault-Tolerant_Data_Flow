@@ -120,7 +120,7 @@ public class Client {
             request.sendData(data);
 
             while (true) {
-                System.out.println("Do you want to compute with other data? (y/n)");
+                System.out.println("Do you want to insert other data to compute? (y/n)");
                 if (scanner.nextLine().toLowerCase().equals("n")) {
                     break;
                 } else {
@@ -137,7 +137,7 @@ public class Client {
 
             request.close();
 
-            System.out.println("Do you want to continue? (y/n)");
+            System.out.println("Do you want insert a new program? (y/n)");
             if (scanner.nextLine().toLowerCase().equals("n")) {
                 break;
             } else {

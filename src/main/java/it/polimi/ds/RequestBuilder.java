@@ -132,7 +132,7 @@ public class RequestBuilder {
                 case INVALID_PROGRAM:
                     throw new RuntimeException("The provided program is malformed -- " + allocation_resp.getCode());
                 case NOT_ENOUGH_RESOURCES:
-                    throw new RuntimeException("The provided program is malformed -- " + allocation_resp.getCode());
+                    throw new RuntimeException("There is not enough resources -- " + allocation_resp.getCode());
 
                 case OK:
                     break;
