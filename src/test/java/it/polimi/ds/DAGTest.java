@@ -86,6 +86,14 @@ public class DAGTest {
             assertEquals(1L, dag2.getNextFreeTaskManager(0).get());
             assertEquals(0L, dag2.getNextFreeTaskManager(0).get());
         });
+
+        System.out.println("DASKLFHDASLKDJASLKDJA");
+        ManageDAG dag3 = new ManageDAG(ByteString.copyFromUtf8("map;add;1"), 2, 2);
+
+        assertDoesNotThrow(() -> {
+            assertEquals(1L, dag3.getNextFreeTaskManager(1).get());
+            assertEquals(0L, dag3.getNextFreeTaskManager(0).get());
+        });
     }
 
     @Test

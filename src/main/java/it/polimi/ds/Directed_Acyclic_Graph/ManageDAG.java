@@ -13,7 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
-import org.apache.commons.collections.functors.OnePredicate;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
@@ -194,7 +193,7 @@ public class ManageDAG {
     public long newComputation(List<Data> init_data) {
         synchronized (new_computation_lock) {
             while (true) {
-//                System.out.println(running_computations);
+                // System.out.println(running_computations);
                 var maybe_comp = running_computations.entrySet().stream()
                         .filter(comp -> comp.getValue().last_checkpoint_group <= checkpointInterval)
                         .findFirst();
@@ -226,7 +225,7 @@ public class ManageDAG {
     }
 
     public synchronized void finishComputation(long computation_id) {
-//        System.out.println("Computation finished");
+        // System.out.println("Computation finished");
 
         releaseLocks(computation_id);
         running_computations.remove(computation_id);
@@ -510,7 +509,7 @@ public class ManageDAG {
     private boolean isInAllocatorsRange(long id) {
         return allocators_wm_map.entrySet().stream()
                 .map(e -> e.getValue())
-                .filter(wm_id -> wm_id >= id && id > wm_id - num_of_allocators)
+                .filter(wm_id -> wm_id >= id && id > wm_id - (numberOfTaskManager / num_of_allocators))
                 .findFirst()
                 .isPresent();
     }
@@ -780,7 +779,7 @@ public class ManageDAG {
 
         while (getCurrentComputationOfGroup(next_grp).isPresent()) {
             System.out.println("LOCK on computation " + getCurrentComputationOfGroup(next_grp).get());
-//            System.out.println(running_computations);
+            // System.out.println(running_computations);
             synchronized (resume_computation_lock) {
                 try {
                     resume_computation_lock.wait();
