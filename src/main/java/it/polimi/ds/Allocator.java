@@ -29,7 +29,7 @@ public class Allocator {
 
                 new Thread(() -> {
                     ProcessBuilder process_builder = new ProcessBuilder("mvn")
-                        .redirectErrorStream(true);
+                            .redirectErrorStream(true);
 
                     try {
                         var req = conn.receive(AllocateNodeManagerRequest.class);
@@ -45,8 +45,7 @@ public class Allocator {
                             BufferedReader reader = new BufferedReader(
                                     new InputStreamReader(proc.getInputStream()));
 
-                            System.out.println(line);
-
+                            String line = reader.readLine();
                             Address coord_addr = Address.fromString(line.split("::")[1]).getValue0();
 
                             conn.send(AllocateNodeManagerResponse.newBuilder()
@@ -63,7 +62,7 @@ public class Allocator {
 
                                 Process proc = process_builder
                                         .command("java", "-ea", "-jar", "target/workers.jar",
-                                            new Address(info.getAddress()).toString(), Integer.toString(procId)) 
+                                                new Address(info.getAddress()).toString(), Integer.toString(procId))
                                         .redirectOutput(ProcessBuilder.Redirect.PIPE)
                                         .start();
 

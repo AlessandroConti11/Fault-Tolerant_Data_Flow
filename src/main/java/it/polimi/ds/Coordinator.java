@@ -92,9 +92,6 @@ public class Coordinator {
         heartbeat.start();
     }
 
-    void allocNodeManagers(Node conn) throws IOException {
-    }
-
     Thread heartbeat = new Thread(() -> {
         Object lock = new Object();
         ExecutorService hb_executor = Executors.newSingleThreadExecutor();
