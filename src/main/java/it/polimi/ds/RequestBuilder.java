@@ -38,13 +38,13 @@ public class RequestBuilder {
 
         public Vector<DataResponse> getResponses() {
             return responses.stream().map(fut -> {
-				try {
-					return fut.get();
-				} catch (InterruptedException | ExecutionException e) {
-					e.printStackTrace();
-				}
-				return null;
-			}).collect(Collectors.toCollection(Vector::new));
+                try {
+                    return fut.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }).collect(Collectors.toCollection(Vector::new));
         }
 
         public void sendData(List<Pair<Integer, Integer>> data) throws IOException {
@@ -60,7 +60,6 @@ public class RequestBuilder {
                                     .collect(Collectors.toList()))
                             .build())
                     .build());
-
 
             responses.add(exe.submit(() -> coordinator.receive(DataResponse.class)));
         }

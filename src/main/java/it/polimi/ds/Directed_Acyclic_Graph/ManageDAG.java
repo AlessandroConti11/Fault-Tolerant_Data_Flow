@@ -514,36 +514,40 @@ public class ManageDAG {
                 .isPresent();
     }
 
-    public Optional<Long> getNextFreeTaskManager(long allocator_id) {
-        if (freeTaskManagers.size() > 0) {
-            if (!allocators_wm_map.containsKey(allocator_id)) {
-                final long new_id = freeTaskManagers.stream()
-                        .filter(free -> !isInAllocatorsRange(free))
-                        .reduce((first, second) -> second)
-                        .get();
+    private Object getNextLock = new Object();
 
-                allocators_wm_map.put(allocator_id, new_id);
-                freeTaskManagers.removeElement(new_id);
+    public Optional<Long> getNextFreeTaskManager(long allocator_id) {
+        synchronized (getNextLock) {
+            if (freeTaskManagers.size() > 0) {
+                if (!allocators_wm_map.containsKey(allocator_id)) {
+                    final long new_id = freeTaskManagers.stream()
+                            .filter(free -> !isInAllocatorsRange(free))
+                            .reduce((first, second) -> second)
+                            .get();
+
+                    allocators_wm_map.put(allocator_id, new_id);
+                    freeTaskManagers.removeElement(new_id);
+
+                    return Optional.of(new_id);
+                }
+
+                final long base = allocators_wm_map.get(allocator_id);
+                long new_id = -1;
+                for (long i = base; i >= base - (numberOfTaskManager / num_of_allocators); i--) {
+                    if (freeTaskManagers.contains(i)) {
+                        new_id = i;
+                        freeTaskManagers.removeElement(i);
+                        break;
+                    }
+                }
+
+                assert new_id != -1 : "Tried to start a new worker manager when there is no need to";
 
                 return Optional.of(new_id);
             }
 
-            final long base = allocators_wm_map.get(allocator_id);
-            long new_id = -1;
-            for (long i = base; i >= base - (numberOfTaskManager / num_of_allocators); i--) {
-                if (freeTaskManagers.contains(i)) {
-                    new_id = i;
-                    freeTaskManagers.removeElement(i);
-                    break;
-                }
-            }
-
-            assert new_id != -1 : "Tried to start a new worker manager when there is no need to";
-
-            return Optional.of(new_id);
+            return Optional.empty();
         }
-
-        return Optional.empty();
     }
 
     public Optional<Long> groupFromTask(long taskId) {
@@ -792,15 +796,15 @@ public class ManageDAG {
 
     /*
      * insieme 1 --> insieme 2 -->
-     * 
-     * 
-     * 
+     *
+     *
+     *
      * DAG:
      * - insiemi successivi
      * - TMid
      * - Tid1
      * - check point
-     * 
+     *
      * operation to execute
      * last data
      * a chi mando i dati
