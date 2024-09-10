@@ -83,6 +83,8 @@ class Task {
     }
 
     public synchronized void addData(DataRequest req) {
+        System.out.println("Received data " + req.getTaskId() + " count " + data_count + " " + group_size);
+
         dont_send_back_checkpoint = false;
         if (!received_data_from.containsKey(req.getComputationId())) {
             received_data_from.put(req.getComputationId(), new Vector<Long>());
@@ -113,6 +115,7 @@ class Task {
             data_count++;
         }
 
+        System.out.println("Processed data " + req.getTaskId() + " count " + data_count + " " + group_size);
         if (data_count == group_size) {
             has_all_data = true;
 
@@ -139,14 +142,15 @@ class Task {
         dont_send_back_checkpoint = false;
 
         if (req.getSourceRole() == Role.MANAGER || !hasAlreadyComputed()) {
-            assert data_count == 0 && data.isEmpty() : "Received checkpoint while in the middle of a running computation";
+            assert data_count == 0 && data.isEmpty()
+                    : "Received checkpoint while in the middle of a running computation " + req + " ---- " + this;
 
             already_computed = true;
             dont_send_back_checkpoint = true;
             current_computation_id = req.getComputationId();
             this.result = checkpointToResult(req.getDataList());
             data_count = group_size;
-        } 
+        }
 
         if (!received_data_from.containsKey(req.getComputationId())) {
             /// TODO: It would be better to add all tasks to this

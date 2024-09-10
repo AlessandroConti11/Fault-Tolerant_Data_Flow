@@ -701,7 +701,6 @@ public class ManageDAG {
             grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
         }
 
-
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
         comp.fragments_received.add(checkpointRequest.getSourceTaskId());
 

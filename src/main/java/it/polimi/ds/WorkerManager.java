@@ -95,7 +95,7 @@ public class WorkerManager {
         final int PID = Integer.parseInt(args[1]);
         final long ALLOCATOR_ID = Long.parseLong(args[2]);
 
-//        System.out.println("args: " + Arrays.toString(args));
+        // System.out.println("args: " + Arrays.toString(args));
         coordinator_address = Address.fromString(args[0]).getValue0();
         coordinator = new Node(coordinator_address);
 
@@ -108,11 +108,11 @@ public class WorkerManager {
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
 
-//        System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
+        // DON'T COMMENT OUT THIS LINE
+        System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
 
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
-//        System.out.println("grp size" + group_size);
 
         data_listener = ServerSocketChannel.open();
         data_listener.bind(new InetSocketAddress(PID + WorkerManager.DATA_PORT));
@@ -151,7 +151,9 @@ public class WorkerManager {
         synchronized (task) {
             if (!task.hasAlreadyComputed()) {
                 /// Now the task has all the data, we can execute it
+                System.out.println("EXE INI");
                 task.execute();
+                System.out.println("EXE FINNNN");
             }
 
             /// TODO: successors are not passed properly, idk why. <- Maybe outdated
@@ -191,9 +193,12 @@ public class WorkerManager {
                             /// Wait for the coordinator to tell this worker to go on with the computation.
                             /// This notice is in the form of a flush request that tells that the next group
                             /// that it's ready to compute
+                            System.out.println("TASK WAIT");
                             synchronized (task) {
                                 task.wait();
                             }
+                            System.out.println(
+                                    "---------------------TASK NON WAIT");
                         }
 
                         successors.get(successor_id).stream().forEach(next_task_id -> {
@@ -204,9 +209,12 @@ public class WorkerManager {
                                     .setSourceTask(task.getId())
                                     .setComputationId(task.getComputationId())
                                     .setTaskId(next_task_id).build();
+                            System.out.println("Sending task " + task.getId());
                             try {
                                 conn.send(req);
                             } catch (IOException e) {
+                                System.out.println(
+                                        "Crashed on sending" + task.getId() + " ------------------- " + e.getMessage());
                                 // e.printStackTrace();
                             }
                         });
@@ -219,7 +227,7 @@ public class WorkerManager {
                             try {
                                 network_nodes.wait();
                             } catch (InterruptedException e1) {
-                                e1.printStackTrace();
+                                // e1.printStackTrace();
                             }
                         }
                     } catch (InterruptedException e1) {

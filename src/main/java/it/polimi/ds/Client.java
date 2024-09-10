@@ -81,7 +81,7 @@ public class Client {
      * @param args args[0] = server_address; args[1] = program_path; args[2] =
      *             data_path
      */
-    public static void main(String[] args) throws UnknownHostException, IOException {
+    public static void main2(String[] args) throws UnknownHostException, IOException {
         // The path of the program to execute.
         String program;
         // The path of the data to be used in the computation.
@@ -149,18 +149,13 @@ public class Client {
 
     /// Nel caso la metto nel commit lasciami sto main che è comodo per testare la
     /// roba
-    public static void main2(String[] args) throws UnknownHostException, IOException, InterruptedException {
+    public static void main(String[] args) throws UnknownHostException, IOException, InterruptedException {
         Request request = new RequestBuilder()
                 .setAllocations(2)
                 .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
                         "change_key;add;70\n" +
                         "map;add;13\n" +
                         "filter;lower_or_equal;93\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
-                        "change_key;add;75\n" +
                         "filter;not_equal;11\n" +
                         "map;mult;77\n" +
                         "filter;not_equal;19\n" +
@@ -175,12 +170,15 @@ public class Client {
 
         List<Pair<Integer, Integer>> data = new ArrayList<>();
 
-        data.add(new Pair<>(1, 1));
-        data.add(new Pair<>(2, 2));
+        for (int i = 0; i < 1000; i++) {
+            data.add(new Pair<>(i, i));
+        }
+        // data.add(new Pair<>(1, 1));
+        // data.add(new Pair<>(2, 2));
 
-        request.sendData(data);
-        // data.add(new Pair<>(3, 3));
         // request.sendData(data);
+        // data.add(new Pair<>(3, 3));
+        request.sendData(data);
         // data.add(new Pair<>(4, 2));
         // request.sendData(data);
         // data.add(new Pair<>(5, 5));

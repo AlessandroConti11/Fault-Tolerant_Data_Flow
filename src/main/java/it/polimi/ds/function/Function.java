@@ -2,16 +2,17 @@ package it.polimi.ds.function;
 
 import static java.lang.Math.abs;
 
-
 /**
- * The Function class provides a set of static methods that perform basic mathematical operations such as addition, subtraction, multiplication, and division.
+ * The Function class provides a set of static methods that perform basic
+ * mathematical operations such as addition, subtraction, multiplication, and
+ * division.
  */
 public class Function {
     /**
      * Add function.
      *
      * @param number the input number.
-     * @param adder the quantity to add from the number.
+     * @param adder  the quantity to add from the number.
      * @return number + adder.
      */
     private static int add(int number, int adder) {
@@ -21,7 +22,7 @@ public class Function {
     /**
      * Subtract function.
      *
-     * @param number the input number.
+     * @param number   the input number.
      * @param subtract the quantity to subtract from the number.
      * @return number - subtract.
      */
@@ -32,7 +33,7 @@ public class Function {
     /**
      * Multiply function.
      *
-     * @param number the input number.
+     * @param number     the input number.
      * @param multiplier the quantity to multiply from the number.
      * @return number * multiplier.
      */
@@ -43,7 +44,7 @@ public class Function {
     /**
      * Division function.
      *
-     * @param number the input number.
+     * @param number  the input number.
      * @param divider the quantity to divide from the number.
      * @return number / divider.
      */
@@ -55,7 +56,7 @@ public class Function {
      * Compares the number with the equal value.
      *
      * @param number the input number.
-     * @param equal the equality quantity.
+     * @param equal  the equality quantity.
      * @return 1 if the number is equal, 0 otherwise.
      */
     private static int equal(int number, int equal) {
@@ -65,7 +66,7 @@ public class Function {
     /**
      * Compares the number with the notEqual value.
      *
-     * @param number the input number.
+     * @param number   the input number.
      * @param notEqual the not equality quantity.
      * @return 1 if the number is not equal, 0 otherwise.
      */
@@ -76,7 +77,7 @@ public class Function {
     /**
      * Compares the number with the greater value.
      *
-     * @param number the input number.
+     * @param number  the input number.
      * @param greater the greater quantity.
      * @return 1 if the number is greater, 0 otherwise.
      */
@@ -87,7 +88,7 @@ public class Function {
     /**
      * Compares the number with the greaterEqual value.
      *
-     * @param number the input number.
+     * @param number       the input number.
      * @param greaterEqual the greater or equal quantity.
      * @return 1 if the number is greater or equal, 0 otherwise.
      */
@@ -99,7 +100,7 @@ public class Function {
      * Compares the number with the lower value.
      *
      * @param number the input number.
-     * @param lower the lower quantity.
+     * @param lower  the lower quantity.
      * @return 1 if the number is lower, 0 otherwise.
      */
     private static int lowerThan(int number, int lower) {
@@ -109,7 +110,7 @@ public class Function {
     /**
      * Compares the number with the lowerEqual value.
      *
-     * @param number the input number.
+     * @param number     the input number.
      * @param lowerEqual the lower or equal quantity.
      * @return 1 if the number is lower or equal, 0 otherwise.
      */
@@ -117,13 +118,12 @@ public class Function {
         return number <= lowerEqual ? 1 : 0;
     }
 
-
     /**
      * Selects and executes one of the predefined functions.
      *
-     * @param number the input number.
+     * @param number   the input number.
      * @param quantity the quantity to add/subtract/multiply/divide from the number.
-     * @param type the default function type to call.
+     * @param type     the default function type to call.
      * @return result = f(number).
      */
     public static int f(int number, int quantity, FunctionName type) {

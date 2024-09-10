@@ -187,29 +187,29 @@ public class Coordinator {
                         }
                         continue;
                     } else if (alloc_future.isDone()) {
-                        for (long tm_id : allocated) {
+                        var comp_list = allocated.stream().map(tm_id -> {
                             List<Long> impacted_groups = dag.getGroupsOfTaskManager(tm_id);
-                            var comp_list = impacted_groups.stream()
+                            return impacted_groups.stream()
                                     .map(g_id -> dag.getCurrentComputationOfGroup(g_id))
                                     .flatMap(Optional::stream)
                                     .distinct()
                                     .collect(Collectors.toList());
+                        }).flatMap(List::stream).collect(Collectors.toSet());
 
-                            if (comp_list.size() == 0) {
-                                System.out.println("No running computation impacted "
-                                        + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
-                                continue;
-                            }
+                        if (comp_list.size() == 0) {
+                            System.out.println("No running computation impacted");
+                            // + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
+                            continue;
+                        }
 
-                            System.out.println("Sending checkpoint");
-                            for (var comp_id : comp_list) {
-                                long grp = dag.getGroupOfLastCheckpoint(comp_id);
-                                if (grp == -1) {
-                                    var data = dag.getDataRequestsForGroup(comp_id, 0);
-                                    sendComputation(data, 0, comp_id, grp, tm_id);
-                                } else {
-                                    sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp, tm_id);
-                                }
+                        System.out.println("Sending checkpoint");
+                        for (var comp_id : comp_list) {
+                            long grp = dag.getGroupOfLastCheckpoint(comp_id);
+                            if (grp == -1) {
+                                var data = dag.getDataRequestsForGroup(comp_id, 0);
+                                sendComputation(data, 0, comp_id, grp);
+                            } else {
+                                sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
                             }
                         }
                         allocated.clear();
@@ -363,17 +363,16 @@ public class Coordinator {
     });
 
     public void startComputation(List<DataRequest.Builder> data, long group_id, long comp_id) {
-        final var managers = dag.getManagersOfGroup(group_id);
-        for (var wm_id : managers) {
-            sendComputation(data, group_id, comp_id, -1, wm_id);
-        }
+        // final var managers = dag.getManagersOfGroup(group_id);
+        // for (var wm_id : managers) {
+        sendComputation(data, group_id, comp_id, -1);
+        // }
     }
 
-    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id, long checkpoint,
-            long wm_id) {
+    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id, long checkpoint) {
         assert data.size() == dag.getMaxTasksPerGroup() : "Tried to send the wrong type of request";
         dag.getTasksOfGroup(group_id).parallelStream()
-                .filter(t -> dag.getTaskInTaskManager(wm_id).contains(t))
+                // .filter(t -> dag.getTaskInTaskManager(wm_id).contains(t))
                 .forEach(t -> {
                     try {
                         var req = data.get((int) (long) t % dag.getMaxTasksPerGroup())
@@ -426,12 +425,12 @@ public class Coordinator {
                     : "Getting results for a different computation " + r.getComputationId() + " want: "
                             + resp_aggregator.getComputationId();
 
-            assert fragments.size() < max_data_count : "A computation is still going after it has finished";
-
             /// TODO: assert that this comes from a repeated computation somehow
             if (fragments.contains(r.getSourceTask())) {
                 return;
             }
+
+            assert fragments.size() < max_data_count : "A computation is still going after it has finished";
 
             resp_aggregator.addAllData(r.getDataList());
             fragments.add(r.getSourceTask());
@@ -633,7 +632,7 @@ public class Coordinator {
 
             try {
                 while (alive) {
-                    // System.out.println("-----Control thread " + id);
+                    System.out.println("-----Control thread " + id);
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
@@ -686,7 +685,9 @@ public class Coordinator {
                                     : "Tried to flush a computation that doesn't need it somehow";
                             System.out.println("Received flush response");
 
+                            System.out.println("FLUSH ---- " + flushing_comp.get(f_resp.getComputationId()));
                             flushing_comp.compute(f_resp.getComputationId(), (k, v) -> (v == 1) ? null : v - 1);
+                            System.out.println("AFTER FLUSHH ---- " + f_resp.getComputationId() + " " + flushing_comp);
                             dag.releaseLocks(f_resp.getComputationId());
                         } else if (req.hasResult()) {
                             assert is_last : "Got a write back from a non-last manager";
