@@ -191,7 +191,9 @@ public class WorkerManager {
                             /// Wait for the coordinator to tell this worker to go on with the computation.
                             /// This notice is in the form of a flush request that tells that the next group
                             /// that it's ready to compute
-                            task.wait();
+                            synchronized (task) {
+                                task.wait();
+                            }
                         }
 
                         successors.get(successor_id).stream().forEach(next_task_id -> {
@@ -205,7 +207,7 @@ public class WorkerManager {
                             try {
                                 conn.send(req);
                             } catch (IOException e) {
-                                e.printStackTrace();
+                                // e.printStackTrace();
                             }
                         });
                         conn.close();

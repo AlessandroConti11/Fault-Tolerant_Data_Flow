@@ -206,9 +206,9 @@ public class Coordinator {
                                 long grp = dag.getGroupOfLastCheckpoint(comp_id);
                                 if (grp == -1) {
                                     var data = dag.getDataRequestsForGroup(comp_id, 0);
-                                    sendComputation(data, 0, comp_id, grp);
+                                    sendComputation(data, 0, comp_id, grp, tm_id);
                                 } else {
-                                    sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp);
+                                    sendComputation(dag.getLastCheckpoint(comp_id), grp, comp_id, grp, tm_id);
                                 }
                             }
                         }
@@ -301,7 +301,7 @@ public class Coordinator {
 
                             System.out.println("Sending over computation " + comp_id);
                             // computation workers + last reduce
-                            sendComputation(data, 0, comp_id);
+                            startComputation(data, 0, comp_id);
 
                             try {
                                 client.send(result_builders.get(comp_id).waitForResult());
@@ -362,44 +362,52 @@ public class Coordinator {
         }
     });
 
-    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id) {
-        sendComputation(data, group_id, comp_id, -1);
+    public void startComputation(List<DataRequest.Builder> data, long group_id, long comp_id) {
+        final var managers = dag.getManagersOfGroup(group_id);
+        for (var wm_id : managers) {
+            sendComputation(data, group_id, comp_id, -1, wm_id);
+        }
     }
 
-    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id, long checkpoint) {
+    public void sendComputation(List<DataRequest.Builder> data, long group_id, long comp_id, long checkpoint,
+            long wm_id) {
         assert data.size() == dag.getMaxTasksPerGroup() : "Tried to send the wrong type of request";
-        dag.getTasksOfGroup(group_id).parallelStream().forEach(t -> {
-            try {
-                var req = data.get((int) (long) t % dag.getMaxTasksPerGroup())
-                        .setComputationId(comp_id)
-                        .setSourceRole(Role.MANAGER)
-                        .setTaskId(t)
-                        .setSourceTask(-1);
-                if (checkpoint != -1) {
-                    req.setCrashedGroup(checkpoint);
-                }
-                try {
-                    workers.get(dag.getManagerOfTask((long) t).get())
-                            .send(req.build());
-                } catch (Exception ee) {
-                    synchronized (workers) {
-                        try {
-                            workers.wait();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
+        dag.getTasksOfGroup(group_id).parallelStream()
+                .filter(t -> dag.getTaskInTaskManager(wm_id).contains(t))
+                .forEach(t -> {
+                    try {
+                        var req = data.get((int) (long) t % dag.getMaxTasksPerGroup())
+                                .setComputationId(comp_id)
+                                .setSourceRole(Role.MANAGER)
+                                .setTaskId(t)
+                                .setSourceTask(-1);
+
+                        if (checkpoint != -1) {
+                            req.setCrashedGroup(checkpoint);
                         }
+
+                        try {
+                            workers.get(dag.getManagerOfTask((long) t).get())
+                                    .send(req.build());
+                        } catch (Exception ee) {
+                            synchronized (workers) {
+                                try {
+                                    workers.wait();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            var w = workers.get(dag.getManagerOfTask((long) t).get());
+                            assert w != null : "workers: " + workers.keySet() + " manager: "
+                                    + dag.getManagerOfTask((long) t).get() + "task: " + t;
+
+                            w.send(req.build());
+                        }
+
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                    var w = workers.get(dag.getManagerOfTask((long) t).get());
-                    assert w != null : "workers: " + workers.keySet() + " manager: "
-                            + dag.getManagerOfTask((long) t).get() + "task: " + t;
-
-                    w.send(req.build());
-                }
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+                });
     }
 
     class ResultBuilder {
