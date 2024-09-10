@@ -152,16 +152,21 @@ public class Client {
     public static void main(String[] args) throws UnknownHostException, IOException, InterruptedException {
         Request request = new RequestBuilder()
                 .setAllocations(2)
-                .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
-                        "change_key;add;70\n" +
-                        "map;add;13\n" +
-                        "filter;lower_or_equal;93\n" +
-                        "filter;not_equal;11\n" +
-                        "map;mult;77\n" +
-                        "filter;not_equal;19\n" +
-                        "change_key;add;75\n" +
-                        "reduce;add;40\n" +
-                        ""))
+                .setProgram(ByteString.copyFromUtf8(
+                        "change_key;mult;67\n"
+                                + "map;mult;12\n"
+                                + "change_key;sub;14\n"
+                                + "map;sub;17\n"
+                                + "filter;not_equal;47\n"
+                                + "filter;not_equal;11\n"
+                                + "change_key;add;62\n"
+                                + "map;add;46\n"
+                                + "filter;not_equal;87\n"
+                                + "filter;not_equal;83\n"
+                                + "filter;not_equal;98\n"
+                                + "filter;not_equal;13\n"
+                                + "change_key;mult;76\n"
+                                + ""))
                 .addAllocators(Arrays.asList(args).stream()
                         .map(Address::fromStringIp)
                         .map(a -> a.getValue0().withPort(Allocator.PORT))

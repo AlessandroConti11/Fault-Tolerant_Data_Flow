@@ -688,7 +688,9 @@ public class Coordinator {
                             System.out.println("FLUSH ---- " + flushing_comp.get(f_resp.getComputationId()));
                             flushing_comp.compute(f_resp.getComputationId(), (k, v) -> (v == 1) ? null : v - 1);
                             System.out.println("AFTER FLUSHH ---- " + f_resp.getComputationId() + " " + flushing_comp);
-                            dag.releaseLocks(f_resp.getComputationId());
+                            if (flushing_comp.containsKey(f_resp.getComputationId())) {
+                                dag.releaseLocks(f_resp.getComputationId());
+                            }
                         } else if (req.hasResult()) {
                             assert is_last : "Got a write back from a non-last manager";
 

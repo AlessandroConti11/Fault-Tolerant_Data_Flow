@@ -13,6 +13,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -145,8 +146,11 @@ public class WorkerManager {
 
     public void processTask(Task task) {
         task.waitForData();
+
         System.out.println("Processing task id: " + task.getId());
         FaultyThread.maybeCrash();
+        final Map<Long, List<Long>> successors;
+        final List<DataRequest.Builder> requests;
 
         synchronized (task) {
             if (!task.hasAlreadyComputed()) {
@@ -157,7 +161,7 @@ public class WorkerManager {
             }
 
             /// TODO: successors are not passed properly, idk why. <- Maybe outdated
-            var successors = task.getSuccessorMap();
+            successors = task.getSuccessorMap();
             /// Send back to the coordinator if there is nothing more to do
             if (successors.isEmpty()) {
                 writeBackResult(coordinator, task);
@@ -165,78 +169,78 @@ public class WorkerManager {
             }
 
             /// Otherwise send to the next in group
-            List<DataRequest.Builder> requests = task.getSuccessorsDataRequests();
-
+            requests = task.getSuccessorsDataRequests();
             /// Assert that we have only one group as a successors
             assert successors.entrySet().stream().map(e -> e.getValue().size()).reduce(0,
                     (sum, val) -> sum + val) == group_size
                     : "Aggregated number of successors doesn't match group size: " + group_size;
 
-            successors.keySet().parallelStream().forEach(successor_id -> {
-                var successor = network_nodes.get(successor_id);
-                if (successor == null) {
-                    System.out.println("ERROR: Successor not found");
-                    return;
+            if (task.isCheckpoint()) {
+                try {
+                    writeBackCheckpoint(coordinator, task);
+
+                    /// Wait for the coordinator to tell this worker to go on with the computation.
+                    /// This notice is in the form of a flush request that tells that the next group
+                    /// that it's ready to compute
+                    System.out.println("TASK WAIT " + task.getId());
+                    task.wait();
+                    System.out.println(
+                            "---------------------TASK NON WAIT");
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
 
-                System.out.println("Sending results to " + successor_id);
+            }
+        }
 
-                while (true) {
-                    try {
-                        Node conn = new Node(successor);
-                        // System.out.println("task: " + task.getId() + " next: " +
-                        // successors.get(successor_id));
+        successors.keySet().parallelStream().forEach(successor_id -> {
+            var successor = network_nodes.get(successor_id);
+            if (successor == null) {
+                System.out.println("ERROR: Successor not found");
+                return;
+            }
 
-                        if (task.isCheckpoint()) {
-                            writeBackCheckpoint(coordinator, task);
+            System.out.println("Sending results to " + successor_id);
 
-                            /// Wait for the coordinator to tell this worker to go on with the computation.
-                            /// This notice is in the form of a flush request that tells that the next group
-                            /// that it's ready to compute
-                            System.out.println("TASK WAIT");
-                            synchronized (task) {
-                                task.wait();
-                            }
+            while (true) {
+                try {
+                    Node conn = new Node(successor);
+                    System.out.println("task: " + task.getId() + " next: " +
+                            successors.get(successor_id));
+
+                    successors.get(successor_id).stream().forEach(next_task_id -> {
+                        assert task.getId() < next_task_id : "Task id is in successors group";
+
+                        System.out.println("Sending results to for " + next_task_id + " " + successor_id);
+                        var req = requests.get((int) (next_task_id % task.getGroupSize()))
+                                .setSourceRole(Role.WORKER)
+                                .setSourceTask(task.getId())
+                                .setComputationId(task.getComputationId())
+                                .setTaskId(next_task_id).build();
+                        System.out.println("Sending task " + task.getId());
+                        try {
+                            conn.send(req);
+                        } catch (IOException e) {
                             System.out.println(
-                                    "---------------------TASK NON WAIT");
+                                    "Crashed on sending" + task.getId() + " ------------------- " + e.getMessage());
                         }
+                    });
+                    conn.close();
 
-                        successors.get(successor_id).stream().forEach(next_task_id -> {
-                            assert task.getId() < next_task_id : "Task id is in successors group";
-
-                            var req = requests.get((int) (next_task_id % task.getGroupSize()))
-                                    .setSourceRole(Role.WORKER)
-                                    .setSourceTask(task.getId())
-                                    .setComputationId(task.getComputationId())
-                                    .setTaskId(next_task_id).build();
-                            System.out.println("Sending task " + task.getId());
-                            try {
-                                conn.send(req);
-                            } catch (IOException e) {
-                                System.out.println(
-                                        "Crashed on sending" + task.getId() + " ------------------- " + e.getMessage());
-                                // e.printStackTrace();
-                            }
-                        });
-                        conn.close();
-
-                        break;
-                    } catch (IOException e) {
-                        System.out.println("A successor is not available");
-                        synchronized (network_nodes) {
-                            try {
-                                network_nodes.wait();
-                            } catch (InterruptedException e1) {
-                                // e1.printStackTrace();
-                            }
+                    break;
+                } catch (IOException e) {
+                    System.out.println("A successor is not available");
+                    synchronized (network_nodes) {
+                        try {
+                            network_nodes.wait();
+                        } catch (InterruptedException e1) {
+                            // e1.printStackTrace();
                         }
-                    } catch (InterruptedException e1) {
-                        e1.printStackTrace();
                     }
                 }
-            });
+            }
+        });
 
-        }
     }
 
     public void writeBackCheckpoint(Node node, Task task) {
@@ -314,10 +318,11 @@ public class WorkerManager {
                         .filter(t -> f_req.getGroupsIdList().contains(t.getGroupId()))
                         .toList();
 
-                // System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).toList());
+                System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).toList());
 
                 tt.forEach(t -> t.flushComputation((long) f_req.getComputationId()));
 
+                System.out.println("hallo");
                 try {
                     coordinator.send(WorkerManagerRequest.newBuilder()
                             .setFlushResponse(FlushResponse.newBuilder()
@@ -325,10 +330,12 @@ public class WorkerManager {
                                     .build())
                             .build());
 
+                    System.out.println("hallo2");
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
 
+                System.out.println("Flushing3 " + tt.stream().map(t -> t.getId()).toList());
                 /// Notify the other thread that the computation can now resume since the next
                 /// stage of computation is free
                 tt.forEach(t -> {
@@ -337,6 +344,7 @@ public class WorkerManager {
                     }
                 });
 
+                System.out.println("Flushing4 " + tt.stream().map(t -> t.getId()).toList());
                 continue;
             }
 
