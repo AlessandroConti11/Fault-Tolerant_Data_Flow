@@ -71,7 +71,7 @@ public class CreateCSV {
             data += (rand.nextInt(maxNumberDataValue)+1) + ";" + (rand.nextInt(maxNumberDataValue)+1) + "\n"; // key;value
         }
         data += (rand.nextInt(maxNumberDataValue)+1) + ";" + (rand.nextInt(maxNumberDataValue)+1); // key;value
-        return data;
+        return data + "\n";
     }
 
     /**
@@ -211,7 +211,7 @@ public class CreateCSV {
                 break;
         }
 
-        return operation;
+        return operation + "\n";
     }
 
 

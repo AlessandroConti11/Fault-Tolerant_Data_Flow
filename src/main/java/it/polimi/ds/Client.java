@@ -81,7 +81,7 @@ public class Client {
      * @param args args[0] = server_address; args[1] = program_path; args[2] =
      *             data_path
      */
-    public static void main2(String[] args) throws UnknownHostException, IOException {
+    public static void main(String[] args) throws UnknownHostException, IOException {
         // The path of the program to execute.
         String program;
         // The path of the data to be used in the computation.
@@ -97,8 +97,8 @@ public class Client {
             program = insertProgram();
             dataString = insertData();
         } else if (args.length == 3) {
-            program = args[0];
-            dataString = args[1];
+            program = args[1];
+            dataString = args[2];
         } else {
             program = args[1];
             dataString = insertData();
@@ -149,7 +149,7 @@ public class Client {
 
     /// Nel caso la metto nel commit lasciami sto main che è comodo per testare la
     /// roba
-    public static void main(String[] args) throws UnknownHostException, IOException, InterruptedException {
+    public static void main2(String[] args) throws UnknownHostException, IOException, InterruptedException {
         Request request = new RequestBuilder()
                 .setAllocations(2)
                 .setProgram(ByteString.copyFromUtf8("filter;not_equal;55\n" +
