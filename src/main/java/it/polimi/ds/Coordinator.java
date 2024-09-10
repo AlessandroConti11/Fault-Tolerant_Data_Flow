@@ -8,6 +8,7 @@ import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Vector;
@@ -74,6 +75,7 @@ public class Coordinator {
     private ManageDAG dag = null;
     private AtomicLong just_connected = new AtomicLong(0);
 
+    private Map<Long, Integer> flushing_comp = new ConcurrentHashMap<>();
     private volatile boolean closing = false;
 
     public Coordinator() {
@@ -124,15 +126,21 @@ public class Coordinator {
                     for (var worker : workers.entrySet()) {
                         boolean alive = worker.getValue().isAlive();
                         if (!alive) {
+                            dag.getComputationsOfWM(worker.getKey()).stream().forEach(c -> {
+                                if (flushing_comp.containsKey(c)) {
+                                    flushing_comp.compute(c, (k, v) -> (v == 1) ? null : v - 1);
+                                }
+                            });
                             dag.addFreeTaskManager((int) (long) worker.getKey());
                             workers.remove(worker.getKey());
                             crashed.add(worker.getKey());
+
                         }
                     }
                 }
 
                 if (crashed.size() > 0) {
-                    System.out.println("Trying to allocate " + crashed.size() + "resources");
+                    System.out.println("Trying to allocate " + crashed.size() + " resources");
 
                     crashed.parallelStream().forEach(crashed_id -> {
                         try {
@@ -601,7 +609,8 @@ public class Coordinator {
                                 .build())
                         .build());
 
-                flushin_comp.add(comp_id);
+                flushing_comp.compute(comp_id, (k, v) -> (v == null) ? 1 : v + 1);
+                // flushin_comp.add(comp_id);
             } catch (IOException e) {
                 System.out.println(
                         "Failed to send over a flush request, probably a workerManager crashed -- "
@@ -609,10 +618,9 @@ public class Coordinator {
             }
         }
 
-        private Vector<Long> flushin_comp = new Vector<>();
-
         @Override
         public void run() {
+            Object lock = new Object();
             // System.out.println("Worker manager connected");
 
             try {
@@ -627,47 +635,51 @@ public class Coordinator {
                                     .getNumberOfGroups() : "Checkpoint doesn't make sense to be the last group";
 
                             exe.submit(() -> {
-                                try {
-                                    boolean is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
-                                    if (is_checkpoint_complete) {
-                                        var c_req = req.getCheckpointRequest();
-                                        long comp_id = c_req.getComputationId();
-                                        long src_task_id = c_req.getSourceTaskId();
+                                synchronized (lock) {
+                                    try {
+                                        System.out.println("CACCA PUPU " + checkpoint.getComputationId());
+                                        boolean is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
+                                        if (is_checkpoint_complete) {
+                                            var c_req = req.getCheckpointRequest();
+                                            long comp_id = c_req.getComputationId();
+                                            long src_task_id = c_req.getSourceTaskId();
 
-                                        System.out.println("Flushing computation " + comp_id);
-                                        var grps = dag.getStageFromTask(src_task_id);
+                                            System.out.println("Flushing computation " + comp_id);
+                                            var grps = dag.getStageFromTask(src_task_id);
 
-                                        /// If it's not the result of a checkpoint recovery, then wait for the next step
-                                        /// to be empty
-                                        if (c_req.getIsFromAnotherCheckpoint() == 0) {
-                                            dag.waitForNextStageToBeFree(src_task_id);
-                                            dag.moveForwardWithComputation(comp_id);
+                                            /// If it's not the result of a checkpoint recovery, then wait for the next
+                                            /// step to be empty
+                                            if (c_req.getIsFromAnotherCheckpoint() == 0) {
+                                                dag.waitForNextStageToBeFree(src_task_id);
+                                                dag.moveForwardWithComputation(comp_id);
+                                            }
+
+                                            /// Send the flushing request to the appropriate worker manager
+                                            var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
+                                                    .collect(Collectors.toList());
+                                            Set<Long> wm_ids = new HashSet<>();
+                                            for (Set<Long> wms : wm_sets) {
+                                                wm_ids.addAll(wms);
+                                            }
+
+                                            wm_ids.forEach(wm -> {
+                                                var w = workers.get(wm);
+                                                w.flush(comp_id, grps);
+                                            });
+                                            System.out.println("Flushing complete " + comp_id);
                                         }
-
-                                        /// Send the flushing request to the appropriate worker manager
-                                        var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
-                                                .collect(Collectors.toList());
-                                        Set<Long> wm_ids = new HashSet<>();
-                                        for (Set<Long> wms : wm_sets) {
-                                            wm_ids.addAll(wms);
-                                        }
-
-                                        wm_ids.forEach(wm -> {
-                                            var w = workers.get(wm);
-                                            w.flush(comp_id, grps);
-                                        });
+                                    } catch (Throwable t) {
+                                        t.printStackTrace();
                                     }
-                                } catch (Throwable t) {
-                                    t.printStackTrace();
                                 }
                             });
                         } else if (req.hasFlushResponse()) {
                             var f_resp = req.getFlushResponse();
-                            assert flushin_comp.contains(f_resp.getComputationId())
+                            assert flushing_comp.containsKey(f_resp.getComputationId())
                                     : "Tried to flush a computation that doesn't need it somehow";
                             System.out.println("Received flush response");
 
-                            flushin_comp.remove(f_resp.getComputationId());
+                            flushing_comp.compute(f_resp.getComputationId(), (k, v) -> (v == 1) ? null : v - 1);
                             dag.releaseLocks(f_resp.getComputationId());
                         } else if (req.hasResult()) {
                             assert is_last : "Got a write back from a non-last manager";
@@ -680,7 +692,7 @@ public class Coordinator {
                                 }
                             });
                         } else {
-                            assert false : "Forgot to add the handling case for a new message";
+                            assert false : "Forgot to add the handling case for a new message " + req;
                         }
                     } catch (SocketTimeoutException e) {
                         if (network_changed) {

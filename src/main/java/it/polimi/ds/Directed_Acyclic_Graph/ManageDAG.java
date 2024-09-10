@@ -674,7 +674,8 @@ public class ManageDAG {
                 + " should exist. Got " + running_computations;
         var grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
-        assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint";
+        assert comp.fragments_received.size() < maxTasksPerGroup
+                : "Received request for a finished checkpoint " + comp.toString();
         assert grp <= comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
                 + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
@@ -792,6 +793,17 @@ public class ManageDAG {
                 }
             }
         }
+    }
+
+    public List<Long> getComputationsOfWM(long wm_id) {
+        var groups = getGroupsOfTaskManager(wm_id);
+        Vector<Long> ret = new Vector<>();
+        for (var g : groups) {
+            var comp = getCurrentComputationOfGroup(g);
+            comp.ifPresent(c -> ret.add(g));
+        }
+
+        return ret;
     }
 
     /*
