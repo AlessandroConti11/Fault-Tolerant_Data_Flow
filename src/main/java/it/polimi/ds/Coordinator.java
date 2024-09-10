@@ -94,7 +94,7 @@ public class Coordinator {
 
     Thread workerListener = new Thread(() -> {
         try {
-//            System.out.println(PID + " " + WORKER_PORT);
+            // System.out.println(PID + " " + WORKER_PORT);
             ServerSocket workerListener = new ServerSocket(PID + WORKER_PORT);
             while (true) {
                 Node node = new Node(workerListener.accept());
@@ -275,7 +275,7 @@ public class Coordinator {
             client.send(AllocationResponse.newBuilder()
                     .build());
 
-//            System.out.println("Client Network ready");
+            // System.out.println("Client Network ready");
 
             while (true) {
                 try {
@@ -292,7 +292,7 @@ public class Coordinator {
                             var data = dag.getDataRequestsForGroup(comp_id, 0);
 
                             System.out.println("Sending over computation " + comp_id);
-                            //computation workers + last reduce
+                            // computation workers + last reduce
                             sendComputation(data, 0, comp_id);
 
                             try {
@@ -419,7 +419,7 @@ public class Coordinator {
 
             resp_aggregator.addAllData(r.getDataList());
             fragments.add(r.getSourceTask());
-//            System.out.println("fragments : " + fragments + " max : " + max_data_count);
+            // System.out.println("fragments : " + fragments + " max : " + max_data_count);
             if (fragments.size() >= max_data_count) {
                 synchronized (lock) {
                     lock.notifyAll();
@@ -437,20 +437,19 @@ public class Coordinator {
                 }
             }
 
-
-            //The position of the last operation to compute
+            // The position of the last operation to compute
             int lastReduce = dag.getOperationsGroup().size();
 
-            //The last reduce - if needed
+            // The last reduce - if needed
             if (dag.getOperationsGroup().get(lastReduce - 1).get(0).getValue0().equals(OperatorName.REDUCE)) {
-                //The final data computed from the worker.
+                // The final data computed from the worker.
                 List<Pair<Integer, Integer>> finalData = ManageCSVfile.readCSVinput(resp_aggregator.getDataList());
 
-                //Compute the last reduce.
+                // Compute the last reduce.
                 Operator operator = new Operator();
                 finalData = operator.operations(dag.getOperationsGroup().get(lastReduce - 1), finalData);
 
-                //The data after the reduce
+                // The data after the reduce
                 DataResponse.Builder dataResponse = DataResponse.newBuilder();
                 dataResponse
                         .setComputationId(resp_aggregator.getComputationId())
@@ -463,12 +462,13 @@ public class Coordinator {
                                 .toList())
                         .build();
 
-//                System.out.println("Sending back results for " + dataResponse.getDataList());
+                // System.out.println("Sending back results for " + dataResponse.getDataList());
                 System.out.println("Sending back results");
                 return dataResponse.build();
             }
 
-//            System.out.println("Sending back results for " + resp_aggregator.getComputationId());
+            // System.out.println("Sending back results for " +
+            // resp_aggregator.getComputationId());
             System.out.println("Sending back results");
             return resp_aggregator.build();
         }
@@ -509,8 +509,8 @@ public class Coordinator {
 
             var operations = dag.getOperationsForTaskManager(id);
 
-//            System.out.println("max task" + dag.getMaxTasksPerGroup());
-//            System.out.println("ID " + id);
+            // System.out.println("max task" + dag.getMaxTasksPerGroup());
+            // System.out.println("ID " + id);
             conn.send(RegisterNodeManagerResponse.newBuilder()
                     .setId(id)
                     .addAllTasks(tasks.stream()
@@ -553,8 +553,8 @@ public class Coordinator {
             conn.receive(SynchRequest.class);
             conn.send(SynchResponse.newBuilder().build());
 
-//            System.out.println("Data connection with " + id + " opened on "
-//                    + address);
+            // System.out.println("Data connection with " + id + " opened on "
+            // + address);
 
             data_connection = new Node(address);
 
@@ -613,11 +613,11 @@ public class Coordinator {
 
         @Override
         public void run() {
-//            System.out.println("Worker manager connected");
+            // System.out.println("Worker manager connected");
 
             try {
                 while (alive) {
-//                    System.out.println("-----Control thread " + id);
+                    // System.out.println("-----Control thread " + id);
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {
@@ -741,7 +741,7 @@ public class Coordinator {
     private void allocateResources(ManageDAG dag, int requested_workers, long wm_id) throws IOException {
         final int index = (int) ((allocators.size() / dag.getNumberOfTaskManager()) * wm_id);
 
-        allocateResources(dag, requested_workers, allocators.get(index));
+        allocateResources(dag, requested_workers, allocators.get(allocators.size() - 1 - index));
     }
 
     private void allocateResources(ManageDAG dag, int requested_workers) throws IOException {

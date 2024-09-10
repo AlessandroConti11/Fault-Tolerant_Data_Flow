@@ -31,7 +31,7 @@ public class Allocator {
             while (true) {
                 Node conn = new Node(listener.accept());
 
-                //allocate Coordinator / Workers
+                // allocate Coordinator / Workers
                 new Thread(() -> {
                     ProcessBuilder process_builder = new ProcessBuilder("mvn")
                             .redirectErrorStream(true);
@@ -110,7 +110,7 @@ public class Allocator {
                         line = reader.readLine();
                         continue;
                     }
-                    //[N/M][PROCESS]WHAT IS DOING
+                    // [N/M][PROCESS]WHAT IS DOING
                     System.out.println(getAlivePrefix() + pr + line);
                     line = reader.readLine();
                 }

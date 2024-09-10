@@ -53,8 +53,13 @@ public class Node {
     public <T extends GeneratedMessageV3> T receive(Class<T> clazz, int timeout)
             throws SocketTimeoutException, IOException {
         conn.setSoTimeout(timeout);
-        T ret = receive(clazz);
-        conn.setSoTimeout(0);
+        T ret = null;
+        try {
+            ret = receive(clazz);
+        } catch (SocketTimeoutException e) {
+            conn.setSoTimeout(0);
+            throw e;
+        }
         return ret;
     }
 
