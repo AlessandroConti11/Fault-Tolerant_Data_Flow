@@ -637,7 +637,6 @@ public class Coordinator {
                             exe.submit(() -> {
                                 synchronized (lock) {
                                     try {
-                                        System.out.println("CACCA PUPU " + checkpoint.getComputationId());
                                         boolean is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
                                         if (is_checkpoint_complete) {
                                             var c_req = req.getCheckpointRequest();

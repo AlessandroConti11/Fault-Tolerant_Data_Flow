@@ -674,6 +674,10 @@ public class ManageDAG {
                 + " should exist. Got " + running_computations;
         var grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
+        /// TODO: assert that this comes from a repeated computation
+        if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
+            return false;
+
         assert comp.fragments_received.size() < maxTasksPerGroup
                 : "Received request for a finished checkpoint " + comp.toString();
         assert grp <= comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
@@ -697,9 +701,6 @@ public class ManageDAG {
             grp = groupFromTask(checkpointRequest.getSourceTaskId()).get();
         }
 
-        /// TODO: assert that this comes from a repeated computation
-        if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
-            return false;
 
         comp.current_checkpoint.addAllData(checkpointRequest.getDataList());
         comp.fragments_received.add(checkpointRequest.getSourceTaskId());

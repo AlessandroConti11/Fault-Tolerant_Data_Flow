@@ -95,7 +95,7 @@ public class WorkerManager {
         final int PID = Integer.parseInt(args[1]);
         final long ALLOCATOR_ID = Long.parseLong(args[2]);
 
-        // System.out.println("args: " + Arrays.toString(args));
+//        System.out.println("args: " + Arrays.toString(args));
         coordinator_address = Address.fromString(args[0]).getValue0();
         coordinator = new Node(coordinator_address);
 
@@ -108,11 +108,11 @@ public class WorkerManager {
         var resp = coordinator.receive(RegisterNodeManagerResponse.class);
         id = resp.getId();
 
-        // System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
+//        System.out.println(Allocator.WM_MESSAGE_PREFIX + id);
 
         computations = resp.getComputationsList();
         group_size = resp.getGroupSize();
-        // System.out.println("grp size" + group_size);
+//        System.out.println("grp size" + group_size);
 
         data_listener = ServerSocketChannel.open();
         data_listener.bind(new InetSocketAddress(PID + WorkerManager.DATA_PORT));
