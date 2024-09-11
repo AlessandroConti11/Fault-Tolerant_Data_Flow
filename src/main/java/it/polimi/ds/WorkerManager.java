@@ -204,39 +204,35 @@ public class WorkerManager {
             while (true) {
                 try {
                     Node conn = new Node(successor);
-                    System.out.println("task: " + task.getId() + " next: " +
-                            successors.get(successor_id));
+                    System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
 
-                    successors.get(successor_id).stream().forEach(next_task_id -> {
+                    var succ = successors.get(successor_id);
+                    while (succ.size() > 0) {
+                        var next_task_id = succ.get(0);
                         assert task.getId() < next_task_id : "Task id is in successors group";
 
-                        // System.out.println("Sending results by task " + task.getId() + " to for next
-                        // task"
-                        // + next_task_id + " to " + successor_id);
                         var req = requests.get((int) (next_task_id % task.getGroupSize()))
                                 .setSourceRole(Role.WORKER)
                                 .setSourceTask(task.getId())
                                 .setComputationId(task.getComputationId())
                                 .setTaskId(next_task_id).build();
-                        try {
-                            conn.send(req);
-                        } catch (IOException e) {
-                            System.out.println(
-                                    "Crashed on sending" + task.getId() + " ------------------- " + e.getMessage());
-                        }
-                    });
+
+                        conn.send(req);
+
+                        succ.remove(0);
+                    }
                     conn.close();
 
                     break;
                 } catch (IOException e) {
                     System.out.println("A successor is not available");
-                    synchronized (network_nodes) {
-                        try {
-                            network_nodes.wait();
-                        } catch (InterruptedException e1) {
-                            // e1.printStackTrace();
-                        }
-                    }
+                    // synchronized (network_nodes) {
+                    // try {
+                    // network_nodes.wait();
+                    // } catch (InterruptedException e1) {
+                    // // e1.printStackTrace();
+                    // }
+                    // }
                 }
             }
         });
@@ -358,14 +354,12 @@ public class WorkerManager {
                 }
 
                 // System.out.println("Network updated");
-            }
-            try {
-                coordinator.send(UpdateNetworkResponse.newBuilder().build());
-            } catch (IOException e) {
-                // UNREACHABLE, coordinator is reliable
-            }
+                try {
+                    coordinator.send(UpdateNetworkResponse.newBuilder().build());
+                } catch (IOException e) {
+                    // UNREACHABLE, coordinator is reliable
+                }
 
-            synchronized (network_nodes) {
                 /// If a successor crashes, the other thread will wait, so we just unlock it
                 network_nodes.notifyAll();
             }
