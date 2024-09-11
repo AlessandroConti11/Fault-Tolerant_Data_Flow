@@ -204,11 +204,10 @@ public class WorkerManager {
             while (true) {
                 try {
                     Node conn = new Node(successor);
-                    System.out.println("task: " + task.getId() + " next: " + successors.get(successor_id));
+                    System.out.println("task: " + task.getId() + " next: " +
+                            successors.get(successor_id));
 
-                    var succ = successors.get(successor_id);
-                    while (succ.size() > 0) {
-                        var next_task_id = succ.get(0);
+                    successors.get(successor_id).stream().forEach(next_task_id -> {
                         assert task.getId() < next_task_id : "Task id is in successors group";
 
                         var req = requests.get((int) (next_task_id % task.getGroupSize()))
@@ -216,23 +215,25 @@ public class WorkerManager {
                                 .setSourceTask(task.getId())
                                 .setComputationId(task.getComputationId())
                                 .setTaskId(next_task_id).build();
-
-                        conn.send(req);
-
-                        succ.remove(0);
-                    }
+                        try {
+                            conn.send(req);
+                        } catch (IOException e) {
+                            System.out.println(
+                                    "Crashed on sending" + task.getId() + " ------------------- " + e.getMessage());
+                        }
+                    });
                     conn.close();
 
                     break;
                 } catch (IOException e) {
                     System.out.println("A successor is not available");
-                    // synchronized (network_nodes) {
-                    // try {
-                    // network_nodes.wait();
-                    // } catch (InterruptedException e1) {
-                    // // e1.printStackTrace();
-                    // }
-                    // }
+                    synchronized (network_nodes) {
+                        try {
+                            network_nodes.wait();
+                        } catch (InterruptedException e1) {
+                            // e1.printStackTrace();
+                        }
+                    }
                 }
             }
         });
