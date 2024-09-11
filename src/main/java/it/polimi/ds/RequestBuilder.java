@@ -62,7 +62,15 @@ public class RequestBuilder {
                             .build())
                     .build());
 
-            responses.add(exe.submit(() -> coordinator.receive(DataResponse.class)));
+            responses.add(exe.submit(() -> {
+                try {
+                    return coordinator.receive(DataResponse.class);
+                } catch (Throwable e) {
+                    e.printStackTrace();
+
+                    return null;
+                }
+            }));
         }
 
         public void close() throws IOException {

@@ -352,6 +352,22 @@ public class Coordinator {
                     }
                 } catch (Exception e) {
                     System.out.println("Client disconnected -- " + e.getMessage());
+
+                    /// Close the hearthbeat thread
+                    closing = true;
+                    heartbeat.join();
+
+                    workers.values().parallelStream().forEach(w -> {
+                        try {
+                            w.close();
+                        } catch (IOException ee) {
+                            ee.printStackTrace();
+                        }
+                    });
+
+                    client.send(CloseResponse.newBuilder().build());
+                    System.exit(0);
+
                     break;
                 }
             }

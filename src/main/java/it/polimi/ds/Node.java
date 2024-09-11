@@ -67,6 +67,7 @@ public class Node {
         }
 
         final int len = ByteBuffer.wrap(len_bytes).getInt();
+        assert len >= 0;
 
         byte[] msg_bytes = new byte[len];
         int read = 0;
