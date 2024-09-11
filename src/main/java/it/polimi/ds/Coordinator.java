@@ -76,7 +76,10 @@ public class Coordinator {
     private AtomicLong just_connected = new AtomicLong(0);
 
     private Map<Long, Integer> flushing_comp = new ConcurrentHashMap<>();
+    private Map<Long, Boolean> is_flushing_comp_recovery = new ConcurrentHashMap<>();
     private volatile boolean closing = false;
+
+    private Object flush_lock = new Object();
 
     public Coordinator() {
     }
@@ -126,13 +129,15 @@ public class Coordinator {
                     for (var worker : workers.entrySet()) {
                         boolean alive = worker.getValue().isAlive();
                         if (!alive) {
+                            workers.remove(worker.getKey());
+
                             dag.getComputationsOfWM(worker.getKey()).stream().forEach(c -> {
                                 if (flushing_comp.containsKey(c)) {
-                                    flushing_comp.compute(c, (k, v) -> (v == 1) ? null : v - 1);
+                                    decreaseFlushingComp(c);
                                 }
                             });
                             dag.addFreeTaskManager((int) (long) worker.getKey());
-                            workers.remove(worker.getKey());
+
                             crashed.add(worker.getKey());
 
                         }
@@ -323,9 +328,25 @@ public class Coordinator {
                                 wm_ids.addAll(wms);
                             }
 
-                            wm_ids.forEach(wm -> {
+                            flushing_comp.put(comp_id, dag.getMaxTasksPerGroup() - 1);
+                            wm_ids.parallelStream().forEach(wm -> {
                                 var w = workers.get(wm);
-                                w.flush(comp_id, grps);
+                                if (w != null)
+                                    w.flush(comp_id, grps);
+                            });
+
+                            synchronized (flush_lock) {
+                                try {
+                                    flush_lock.wait();
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+
+                            wm_ids.parallelStream().forEach(wm -> {
+                                var w = workers.get(wm);
+                                if (w != null)
+                                    w.flushOk(comp_id, grps);
                             });
 
                             dag.finishComputation(comp_id);
@@ -372,12 +393,24 @@ public class Coordinator {
 
             client.close();
 
-        } catch (
-
-        Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     });
+
+    public void decreaseFlushingComp(long comp_id) {
+        var res = flushing_comp.computeIfPresent(comp_id, (k, v) -> (v <= 1) ? null : v - 1);
+        if (res == null) {
+            if (is_flushing_comp_recovery.containsKey(comp_id) && is_flushing_comp_recovery.remove(comp_id)) {
+                dag.moveForwardWithComputation(comp_id);
+            }
+
+            synchronized (flush_lock) {
+                flush_lock.notifyAll();
+            }
+            dag.releaseLocks(comp_id);
+        }
+    }
 
     public void startComputation(List<DataRequest.Builder> data, long group_id, long comp_id) {
         // final var managers = dag.getManagersOfGroup(group_id);
@@ -623,18 +656,35 @@ public class Coordinator {
             data_connection.close();
         }
 
-        public void flush(Long comp_id, List<Long> group_ids) {
+        public void flushOk(Long comp_id, List<Long> group_ids) {
+            var flush_req = FlushRequest.newBuilder()
+                    .setComputationId(comp_id)
+                    .addAllGroupsId(group_ids)
+                    .build();
+
             try {
                 control_connection.send(ControlWorkerRequest
                         .newBuilder()
-                        .setFlushRequest(FlushRequest.newBuilder()
-                                .setComputationId(comp_id)
-                                .addAllGroupsId(group_ids)
-                                .build())
+                        .setFlushOk(flush_req)
                         .build());
+            } catch (IOException e) {
+                System.out.println(
+                        "Failed to send over a flush request, probably a workerManager crashed -- "
+                                + e.getMessage());
+            }
+        }
 
-                flushing_comp.compute(comp_id, (k, v) -> (v == null) ? 1 : v + 1);
-                // flushin_comp.add(comp_id);
+        public void flush(Long comp_id, List<Long> group_ids) {
+            var flush_req = FlushRequest.newBuilder()
+                    .setComputationId(comp_id)
+                    .addAllGroupsId(group_ids)
+                    .build();
+
+            try {
+                control_connection.send(ControlWorkerRequest
+                        .newBuilder()
+                        .setFlushRequest(flush_req)
+                        .build());
             } catch (IOException e) {
                 System.out.println(
                         "Failed to send over a flush request, probably a workerManager crashed -- "
@@ -659,41 +709,60 @@ public class Coordinator {
                                     .getNumberOfGroups() : "Checkpoint doesn't make sense to be the last group";
 
                             exe.submit(() -> {
-                                synchronized (lock) {
-                                    try {
-                                        boolean is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
-                                        if (is_checkpoint_complete) {
-                                            var c_req = req.getCheckpointRequest();
-                                            long comp_id = c_req.getComputationId();
-                                            long src_task_id = c_req.getSourceTaskId();
-
-                                            System.out.println("Flushing computation " + comp_id);
-                                            var grps = dag.getStageFromTask(src_task_id);
-
-                                            /// If it's not the result of a checkpoint recovery, then wait for the next
-                                            /// step to be empty
-                                            if (c_req.getIsFromAnotherCheckpoint() == 0) {
-                                                dag.waitForNextStageToBeFree(src_task_id);
-                                                dag.moveForwardWithComputation(comp_id);
-                                            }
-
-                                            /// Send the flushing request to the appropriate worker manager
-                                            var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
-                                                    .collect(Collectors.toList());
-                                            Set<Long> wm_ids = new HashSet<>();
-                                            for (Set<Long> wms : wm_sets) {
-                                                wm_ids.addAll(wms);
-                                            }
-
-                                            wm_ids.forEach(wm -> {
-                                                var w = workers.get(wm);
-                                                w.flush(comp_id, grps);
-                                            });
-                                            System.out.println("Flushing complete " + comp_id);
-                                        }
-                                    } catch (Throwable t) {
-                                        t.printStackTrace();
+                                try {
+                                    boolean is_checkpoint_complete = false;
+                                    System.out.println("CHECKPOINT");
+                                    synchronized (lock) {
+                                        is_checkpoint_complete = dag.saveCheckpoint(checkpoint);
                                     }
+                                    System.out.println("CHECKPOINT AFTER");
+                                    if (is_checkpoint_complete) {
+                                        var c_req = req.getCheckpointRequest();
+                                        long comp_id = c_req.getComputationId();
+                                        long src_task_id = c_req.getSourceTaskId();
+
+                                        System.out.println("Flushing computation " + comp_id);
+                                        var grps = dag.getStageFromTask(src_task_id);
+
+                                        /// If it's not the result of a checkpoint recovery, then wait for the next
+                                        /// step to be empty
+                                        if (c_req.getIsFromAnotherCheckpoint() == 0) {
+                                            dag.waitForNextStageToBeFree(src_task_id);
+                                            is_flushing_comp_recovery.put(comp_id, true);
+                                        }
+
+                                        /// Send the flushing request to the appropriate worker manager
+                                        var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
+                                                .collect(Collectors.toList());
+                                        Set<Long> wm_ids = new HashSet<>();
+                                        for (Set<Long> wms : wm_sets) {
+                                            wm_ids.addAll(wms);
+                                        }
+
+                                        flushing_comp.put(comp_id, dag.getMaxTasksPerGroup() - 1);
+                                        wm_ids.parallelStream().forEach(wm -> {
+                                            var w = workers.get(wm);
+                                            if (w != null)
+                                                w.flush(comp_id, grps);
+                                        });
+
+                                        synchronized (flush_lock) {
+                                            try {
+                                                flush_lock.wait();
+                                            } catch (InterruptedException e) {
+                                                e.printStackTrace();
+                                            }
+                                        }
+
+                                        wm_ids.parallelStream().forEach(wm -> {
+                                            var w = workers.get(wm);
+                                            if (w != null)
+                                                w.flushOk(comp_id, grps);
+                                        });
+
+                                    }
+                                } catch (Throwable t) {
+                                    t.printStackTrace();
                                 }
                             });
                         } else if (req.hasFlushResponse()) {
@@ -707,11 +776,8 @@ public class Coordinator {
                             System.out.println("Received flush response");
 
                             System.out.println("FLUSH ---- " + flushing_comp.get(f_resp.getComputationId()));
-                            flushing_comp.compute(f_resp.getComputationId(), (k, v) -> (v == 1) ? null : v - 1);
+                            decreaseFlushingComp(f_resp.getComputationId());
                             System.out.println("AFTER FLUSHH ---- " + f_resp.getComputationId() + " " + flushing_comp);
-                            if (!flushing_comp.containsKey(f_resp.getComputationId())) {
-                                dag.releaseLocks(f_resp.getComputationId());
-                            }
                         } else if (req.hasResult()) {
                             assert is_last : "Got a write back from a non-last manager";
 

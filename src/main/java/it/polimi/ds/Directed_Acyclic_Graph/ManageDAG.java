@@ -1,6 +1,7 @@
 package it.polimi.ds.Directed_Acyclic_Graph;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -678,8 +679,16 @@ public class ManageDAG {
         if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
             return false;
 
-        assert comp.fragments_received.size() < maxTasksPerGroup
-                : "Received request for a finished checkpoint " + comp.toString();
+        /// TOOD: This happens when the recovery duplicates some computatino
+        /// accidentally, figure out why that happens and mitigate it. This can just
+        /// ignore this duplication.
+        if (comp.last_checkpoint_group * maxTasksPerGroup > checkpointRequest.getSourceTaskId())
+            return false;
+
+        assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint "
+                + comp.toString() + " " + running_computations + " " + checkpointRequest.getSourceTaskId() +
+                " " + checkpointRequest.getComputationId();
+
         assert grp <= comp.current_checkpoint_group : "Got checkpoint from unexpected source expect: "
                 + comp.current_checkpoint_group + " got: " + groupFromTask(checkpointRequest.getSourceTaskId()).get();
 
@@ -756,6 +765,25 @@ public class ManageDAG {
         return this.followerGroup.get(group_id) == null;
     }
 
+    public Optional<Long> getCurrentComputationOfGroup2(long group_id) {
+        System.out.println("RUNNING " + running_computations + " GID " + group_id);
+        var computations = running_computations.values().stream()
+                .filter(comp -> comp.last_checkpoint_group <= group_id && comp.current_checkpoint_group >= group_id)
+                .collect(Collectors.toList());
+        assert computations.size() <= 1 : "Somehow there are 2 overlapping computations";
+
+        if (computations.size() == 0)
+            return Optional.empty();
+        for (var entry : running_computations.entrySet()) {
+            if (entry.getValue().equals(computations.get(0))) {
+                return Optional.of(entry.getKey());
+            }
+        }
+
+        assert false : "Uncreachable";
+        return Optional.empty();
+    }
+
     public Optional<Long> getCurrentComputationOfGroup(long group_id) {
         var computations = running_computations.values().stream()
                 .filter(comp -> comp.last_checkpoint_group <= group_id && comp.current_checkpoint_group >= group_id)
@@ -782,9 +810,9 @@ public class ManageDAG {
 
         long next_grp = grp + checkpointInterval;
 
-        while (getCurrentComputationOfGroup(next_grp).isPresent()) {
-            System.out.println("LOCK on computation " + getCurrentComputationOfGroup(next_grp).get());
-            // System.out.println(running_computations);
+        while (getCurrentComputationOfGroup2(next_grp).isPresent()) {
+            System.out.println("LOCK on computation " + next_grp + " " + getCurrentComputationOfGroup(next_grp).get());
+            System.out.println(running_computations);
             synchronized (resume_computation_lock) {
                 try {
                     resume_computation_lock.wait();

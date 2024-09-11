@@ -113,6 +113,7 @@ message ControlWorkerRequest {
       UpdateNetworkRequest update_network_request = 1;
       CloseRequest close_request = 2;
       FlushRequest flush_request = 3;
+      FlushRequest flush_ok = 4;
    }
 }
 

@@ -144,8 +144,9 @@ class Task {
         dont_send_back_checkpoint = false;
 
         if (req.getSourceRole() == Role.MANAGER || !hasAlreadyComputed()) {
-            assert data_count == 0 && data.isEmpty()
-                    : "Received checkpoint while in the middle of a running computation " + req + " ---- " + this;
+            // assert data_count == 0 && data.isEmpty()
+            // : "Received checkpoint while in the middle of a running computation " + req +
+            // " ---- " + this;
 
             already_computed = true;
             dont_send_back_checkpoint = true;

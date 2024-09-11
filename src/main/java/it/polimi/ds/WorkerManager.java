@@ -144,6 +144,20 @@ public class WorkerManager {
         coordinator.receive(SynchResponse.class);
     }
 
+    private Map<Long /* group_id */, Integer /* counter */> group_checkpoint_map = new ConcurrentHashMap<>();
+
+    public synchronized boolean canSendCheckpointRequest(Task task) {
+        /// This is not form a checkpoint recovery request
+        if (!group_checkpoint_map.containsKey(task.getId())) {
+            return task.isCheckpoint();
+        }
+
+        int cont = group_checkpoint_map.get(task.getGroupId());
+        group_checkpoint_map.compute(task.getGroupId(), (k, v) -> v == 1 ? null : v - 1);
+
+        return cont == group_size;
+    }
+
     public void processTask(Task task) {
         task.waitForData();
 
@@ -175,16 +189,16 @@ public class WorkerManager {
                     (sum, val) -> sum + val) == group_size
                     : "Aggregated number of successors doesn't match group size: " + group_size;
 
-            if (task.isCheckpoint()) {
+            if (canSendCheckpointRequest(task)) {
                 try {
                     writeBackCheckpoint(coordinator, task);
 
                     /// Wait for the coordinator to tell this worker to go on with the computation.
                     /// This notice is in the form of a flush request that tells that the next group
                     /// that it's ready to compute
-                    // System.out.println("TASK WAIT " + task.getId());
+                    System.out.println("TASK WAIT " + task.getId());
                     task.wait();
-                    // System.out.println("---------------------TASK NON WAIT");
+                    System.out.println("---------------------TASK NON WAIT");
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -307,15 +321,9 @@ public class WorkerManager {
             if (req.hasFlushRequest()) {
                 var f_req = req.getFlushRequest();
 
-                // System.out.println("Flushing groups: " + f_req.getGroupsIdList().stream()
-                // .sorted()
-                // .toList() + " " + f_req.getComputationId());
-
                 List<Task> tt = tasks.stream()
                         .filter(t -> f_req.getGroupsIdList().contains(t.getGroupId()))
                         .toList();
-
-                // System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).toList());
 
                 tt.forEach(t -> t.flushComputation((long) f_req.getComputationId()));
 
@@ -330,7 +338,17 @@ public class WorkerManager {
                     e.printStackTrace();
                 }
 
-                // System.out.println("Flushing3 " + tt.stream().map(t -> t.getId()).toList());
+                continue;
+            }
+
+            if (req.hasFlushOk()) {
+                System.out.println("FLUSH OK " + req.getFlushOk().getComputationId());
+                var f_req = req.getFlushOk();
+
+                List<Task> tt = tasks.stream()
+                        .filter(t -> f_req.getGroupsIdList().contains(t.getGroupId()))
+                        .toList();
+
                 /// Notify the other thread that the computation can now resume since the next
                 /// stage of computation is free
                 tt.forEach(t -> {
@@ -339,17 +357,18 @@ public class WorkerManager {
                     }
                 });
 
-                // System.out.println("Flushing4 " + tt.stream().map(t -> t.getId()).toList());
                 continue;
             }
 
-            // System.out.println("Received control request");
             assert req.hasUpdateNetworkRequest() : "Forgot to add ControlWorkerRequest to handle: " + req;
             synchronized (network_nodes) {
                 var network_change = req.getUpdateNetworkRequest();
 
                 var nodes = network_change.getAddressesList();
                 var ids = network_change.getTaskManagerIdsList();
+                if (ids.size() != nodes.size())
+                    continue;
+
                 for (int i = 0; i < nodes.size(); i++) {
                     network_nodes.put(ids.get(i), new Address(nodes.get(i)));
                 }
@@ -406,6 +425,8 @@ public class WorkerManager {
                             if (!req.hasCrashedGroup()) {
                                 t.addData(req);
                             } else {
+                                group_checkpoint_map.putIfAbsent(t.getGroupId(), getGroupSize());
+
                                 t.restartFromCheckpoint(req);
                             }
                         } catch (ClosedChannelException e) {
@@ -420,6 +441,10 @@ public class WorkerManager {
             e.printStackTrace();
         }
     });
+
+    public int getGroupSize() {
+        return group_size;
+    }
 
     public static void main(String[] args) throws IOException {
         System.out.println("Starting WorkerManager");
