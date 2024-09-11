@@ -198,11 +198,6 @@ public class Coordinator {
 
                         if (comp_list.size() == 0) {
                             System.out.println("No running computation impacted");
-                            // + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
-
-                            allocated.clear();
-                            alloc_future = null;
-                            continue;
                         }
 
                         System.out.println("Sending checkpoint");
@@ -703,14 +698,18 @@ public class Coordinator {
                             });
                         } else if (req.hasFlushResponse()) {
                             var f_resp = req.getFlushResponse();
-                            assert flushing_comp.containsKey(f_resp.getComputationId())
-                                    : "Tried to flush a computation that doesn't need it somehow";
+                            if (!flushing_comp.containsKey(f_resp.getComputationId())) {
+                                /// It's a flush response that somehow got lost and arrived VERY late. Poor
+                                /// fella :^)
+                                continue;
+                            }
+
                             System.out.println("Received flush response");
 
                             System.out.println("FLUSH ---- " + flushing_comp.get(f_resp.getComputationId()));
                             flushing_comp.compute(f_resp.getComputationId(), (k, v) -> (v == 1) ? null : v - 1);
                             System.out.println("AFTER FLUSHH ---- " + f_resp.getComputationId() + " " + flushing_comp);
-                            if (flushing_comp.containsKey(f_resp.getComputationId())) {
+                            if (!flushing_comp.containsKey(f_resp.getComputationId())) {
                                 dag.releaseLocks(f_resp.getComputationId());
                             }
                         } else if (req.hasResult()) {
