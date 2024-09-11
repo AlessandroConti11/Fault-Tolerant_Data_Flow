@@ -124,7 +124,13 @@ public class Allocator {
     }
 
     private static String getAlivePrefix() {
-        return "[" + procs.stream().filter(p -> p.isAlive()).count() + "/" + procs.size() + "]";
+        int count = 0;
+        for (int i = 0; i < procs.size(); i++) {
+            var p = procs.get(i);
+            count += p.isAlive() ? 1 : 0;
+        }
+
+        return "[" + count + "/" + procs.size() + "]";
     }
 
     public static final String RESET = "\033[0m"; // Text Reset
