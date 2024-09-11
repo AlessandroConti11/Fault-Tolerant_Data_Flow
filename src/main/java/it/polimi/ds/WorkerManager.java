@@ -155,9 +155,9 @@ public class WorkerManager {
         synchronized (task) {
             if (!task.hasAlreadyComputed()) {
                 /// Now the task has all the data, we can execute it
-                System.out.println("EXE INI");
+                System.out.println("Begin execution of task " + task.getId());
                 task.execute();
-                System.out.println("EXE FINNNN");
+                System.out.println("Finish execution of task " + task.getId());
             }
 
             /// TODO: successors are not passed properly, idk why. <- Maybe outdated
@@ -182,10 +182,9 @@ public class WorkerManager {
                     /// Wait for the coordinator to tell this worker to go on with the computation.
                     /// This notice is in the form of a flush request that tells that the next group
                     /// that it's ready to compute
-                    System.out.println("TASK WAIT " + task.getId());
+                    // System.out.println("TASK WAIT " + task.getId());
                     task.wait();
-                    System.out.println(
-                            "---------------------TASK NON WAIT");
+                    // System.out.println("---------------------TASK NON WAIT");
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -211,13 +210,14 @@ public class WorkerManager {
                     successors.get(successor_id).stream().forEach(next_task_id -> {
                         assert task.getId() < next_task_id : "Task id is in successors group";
 
-                        System.out.println("Sending results to for " + next_task_id + " " + successor_id);
+                        // System.out.println("Sending results by task " + task.getId() + " to for next
+                        // task"
+                        // + next_task_id + " to " + successor_id);
                         var req = requests.get((int) (next_task_id % task.getGroupSize()))
                                 .setSourceRole(Role.WORKER)
                                 .setSourceTask(task.getId())
                                 .setComputationId(task.getComputationId())
                                 .setTaskId(next_task_id).build();
-                        System.out.println("Sending task " + task.getId());
                         try {
                             conn.send(req);
                         } catch (IOException e) {
@@ -310,19 +310,18 @@ public class WorkerManager {
             if (req.hasFlushRequest()) {
                 var f_req = req.getFlushRequest();
 
-                System.out.println("Flushing groups: " + f_req.getGroupsIdList().stream()
-                        .sorted()
-                        .toList() + " " + f_req.getComputationId());
+                // System.out.println("Flushing groups: " + f_req.getGroupsIdList().stream()
+                // .sorted()
+                // .toList() + " " + f_req.getComputationId());
 
                 List<Task> tt = tasks.stream()
                         .filter(t -> f_req.getGroupsIdList().contains(t.getGroupId()))
                         .toList();
 
-                System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).toList());
+                // System.out.println("Flushing2 " + tt.stream().map(t -> t.getId()).toList());
 
                 tt.forEach(t -> t.flushComputation((long) f_req.getComputationId()));
 
-                System.out.println("hallo");
                 try {
                     coordinator.send(WorkerManagerRequest.newBuilder()
                             .setFlushResponse(FlushResponse.newBuilder()
@@ -330,12 +329,11 @@ public class WorkerManager {
                                     .build())
                             .build());
 
-                    System.out.println("hallo2");
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
 
-                System.out.println("Flushing3 " + tt.stream().map(t -> t.getId()).toList());
+                // System.out.println("Flushing3 " + tt.stream().map(t -> t.getId()).toList());
                 /// Notify the other thread that the computation can now resume since the next
                 /// stage of computation is free
                 tt.forEach(t -> {
@@ -344,7 +342,7 @@ public class WorkerManager {
                     }
                 });
 
-                System.out.println("Flushing4 " + tt.stream().map(t -> t.getId()).toList());
+                // System.out.println("Flushing4 " + tt.stream().map(t -> t.getId()).toList());
                 continue;
             }
 

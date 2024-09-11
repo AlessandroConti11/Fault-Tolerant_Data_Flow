@@ -81,43 +81,77 @@ public class Client {
      * @param args args[0] = server_address; args[1] = program_path; args[2] =
      *             data_path
      */
-    public static void main2(String[] args) throws UnknownHostException, IOException {
+    public static void main(String[] args) throws UnknownHostException, IOException {
         // The path of the program to execute.
-        String program;
+        String program = null;
         // The path of the data to be used in the computation.
-        String dataString;
+        String dataString = null;
         // The data to be used in the computation
         List<Pair<Integer, Integer>> data;
         // Read the user input.
         Scanner scanner = new Scanner(System.in);
         // The counter of the number of executions.
         int counter = 0;
+        int i = 0;
+        List<Address> addresses = new ArrayList();
+        List<String> data_strings = new ArrayList();
 
-        if (args.length == 1) {
-            program = insertProgram();
-            dataString = insertData();
-        } else if (args.length == 3) {
-            program = args[1];
-            dataString = args[2];
-        } else {
-            program = args[1];
-            dataString = insertData();
+        try {
+            for (var a : args) {
+                addresses.add(Address.fromStringIp(a).getValue0().withPort(Allocator.PORT));
+                i += 1;
+            }
+        } catch (Exception e) {
+            if (i < args.length) {
+                program = args[i];
+                i += 1;
+                for (; i < args.length; i++) {
+                    data_strings.add(args[i]);
+                }
+
+                if (data_strings.size() == 0) {
+                    dataString = insertData();
+                } else {
+                    dataString = data_strings.removeFirst();
+                }
+            } else {
+                program = insertProgram();
+                dataString = insertData();
+            }
+        }
+
+        int allocations = -1;
+        while (allocations < 0) {
+            System.out.println("How many allocators do you want? Positive number please :^)");
+            allocations = Integer.parseInt(scanner.nextLine());
+        }
+
+        if (program == null) {
+            System.out.println("Please provide a program");
+            System.exit(1);
+        }
+
+        if (dataString == null) {
+            System.out.println("Please provide a data file");
+            System.exit(1);
         }
 
         while (true) {
             Request request = null;
             request = new RequestBuilder()
-                    .setAllocations(2)
+                    .setAllocations(allocations)
                     .setProgram(ByteString.copyFromUtf8(Files.readString(Paths.get(program))))
-                    .addAllocators(Arrays.asList(args).stream()
-                            .map(Address::fromStringIp)
-                            .map(a -> a.getValue0().withPort(Allocator.PORT))
-                            .collect(Collectors.toList()))
+                    .addAllocators(addresses)
                     .allocate();
 
             data = ManageCSVfile.readCSVinput(new File(dataString));
 
             request.sendData(data);
+
+            for (var d : data_strings) {
+                request.sendData(ManageCSVfile.readCSVinput(new File(d)));
+            }
+            data_strings.clear();
 
             while (true) {
                 System.out.println("Do you want to insert other data to compute? (y/n)");
@@ -130,7 +164,10 @@ public class Client {
             }
 
             System.out.println("\n\nThe result:");
-            request.getResponses().forEach(System.out::println);
+            var resp = request.getResponses();
+            for (var r : resp) {
+                System.out.println("Got result for " + r.getComputationId());
+            }
 
             ManageCSVfile.writeCSVresult(request.getResponses(), "compute" + counter + ".csv");
             counter++;
@@ -139,7 +176,7 @@ public class Client {
 
             System.out.println("Do you want insert a new program? (y/n)");
             if (scanner.nextLine().toLowerCase().equals("n")) {
-                break;
+                System.exit(0);
             } else {
                 program = insertProgram();
                 dataString = insertData();
@@ -149,7 +186,7 @@ public class Client {
 
     /// Nel caso la metto nel commit lasciami sto main che è comodo per testare la
     /// roba
-    public static void main(String[] args) throws UnknownHostException, IOException, InterruptedException {
+    public static void main2(String[] args) throws UnknownHostException, IOException, InterruptedException {
         Request request = new RequestBuilder()
                 .setAllocations(2)
                 .setProgram(ByteString.copyFromUtf8(

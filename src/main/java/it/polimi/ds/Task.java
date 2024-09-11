@@ -83,7 +83,8 @@ class Task {
     }
 
     public synchronized void addData(DataRequest req) {
-        System.out.println("Received data " + req.getTaskId() + " count " + data_count + " " + group_size);
+        // System.out.println("Received data " + req.getTaskId() + " count " +
+        // data_count + " " + group_size);
 
         dont_send_back_checkpoint = false;
         if (!received_data_from.containsKey(req.getComputationId())) {
@@ -115,7 +116,8 @@ class Task {
             data_count++;
         }
 
-        System.out.println("Processed data " + req.getTaskId() + " count " + data_count + " " + group_size);
+        // System.out.println("Processed data " + req.getTaskId() + " count " +
+        // data_count + " " + group_size);
         if (data_count == group_size) {
             has_all_data = true;
 
