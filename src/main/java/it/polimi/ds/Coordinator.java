@@ -199,6 +199,9 @@ public class Coordinator {
                         if (comp_list.size() == 0) {
                             System.out.println("No running computation impacted");
                             // + dag.getGroupsOfTaskManager(tm_id) + " " + dag.getComputations());
+
+                            allocated.clear();
+                            alloc_future = null;
                             continue;
                         }
 
