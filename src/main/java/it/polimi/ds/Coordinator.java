@@ -310,9 +310,12 @@ public class Coordinator {
                                 e.printStackTrace();
                             }
 
-                            System.out.println("COMPUTATION FINISHED");
+                            System.out.println(
+                                    "---- Finished computation " + comp_id + " "
+                                            + result_builders.get(comp_id).fragments);
 
                             var grps = dag.getStageFromTask(dag.getNumberOfTask() - 1);
+                            System.out.println("CIAO");
 
                             /// Send the flushing request to the appropriate worker manager
                             var wm_sets = grps.stream().map(g -> dag.getManagersOfGroup(g))
@@ -632,7 +635,7 @@ public class Coordinator {
 
             try {
                 while (alive) {
-                    System.out.println("-----Control thread " + id);
+                    // System.out.println("-----Control thread " + id);
                     try {
                         var req = control_connection.receive(WorkerManagerRequest.class, CHECKPOINT_TIMEOUT);
                         if (req.hasCheckpointRequest()) {

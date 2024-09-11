@@ -50,7 +50,7 @@ public class Node {
         out.write(len_plus_data);
     }
 
-    public <T extends GeneratedMessageV3> T receive(Class<T> clazz, int timeout)
+    synchronized public <T extends GeneratedMessageV3> T receive(Class<T> clazz, int timeout)
             throws SocketTimeoutException, IOException {
         conn.setSoTimeout(timeout);
         T ret = null;
@@ -63,15 +63,23 @@ public class Node {
         return ret;
     }
 
-    public <T extends GeneratedMessageV3> T receive(Class<T> clazz) throws IOException {
+    synchronized public <T extends GeneratedMessageV3> T receive(Class<T> clazz) throws IOException {
         byte[] len_bytes = new byte[4];
         if (in.read(len_bytes) != 4) {
             throw new IOException("Unable to read the message length");
         }
 
         final int len = ByteBuffer.wrap(len_bytes).getInt();
+
         byte[] msg_bytes = new byte[len];
-        int read = in.read(msg_bytes);
+        int read = 0;
+        int read_res = 0;
+        do {
+            read += read_res;
+            read_res = in.read(msg_bytes, read, len - read);
+            if (read_res == -1)
+                throw new IOException("Connection closed");
+        } while (read < len);
 
         if (read != len) {
             throw new IOException("Unable to read the message length, read " + read + " needed " + len);
@@ -93,7 +101,7 @@ public class Node {
         return t;
     }
 
-    public <T extends GeneratedMessageV3> T nonBlockReceive(Class<T> clazz) throws IOException {
+    synchronized public <T extends GeneratedMessageV3> T nonBlockReceive(Class<T> clazz) throws IOException {
         SocketChannel channel = conn.getChannel();
         byte[] len_bytes = new byte[4];
         int len_bytes_read = channel.read(ByteBuffer.wrap(len_bytes));
@@ -105,11 +113,20 @@ public class Node {
         }
 
         final int len = ByteBuffer.wrap(len_bytes).getInt();
+
         byte[] msg_bytes = new byte[len];
-        int read = channel.read(ByteBuffer.wrap(msg_bytes));
+        int read = 0;
+        int read_res = 0;
+        do {
+            read += read_res;
+            read_res = channel.read(ByteBuffer.wrap(msg_bytes, read, len - read));
+            if (read_res == -1)
+                throw new IOException("Connection closed");
+        } while (read < len);
 
         if (read != len) {
-            throw new IOException("Unable to read the message length, read " + read + " needed " + len);
+            throw new IOException(
+                    "Unable to read the message length, read " + read + " needed " + len + " " + read_res);
         }
 
         T t = null;
