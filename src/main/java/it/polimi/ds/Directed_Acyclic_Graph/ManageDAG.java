@@ -241,7 +241,7 @@ public class ManageDAG {
             ret.add(DataRequest.newBuilder());
         }
         for (var d : data) {
-            var task_data = ret.get(d.getKey() % maxTasksPerGroup);
+            var task_data = ret.get(Math.abs(d.getKey()) % maxTasksPerGroup);
             task_data.addData(d);
         }
 

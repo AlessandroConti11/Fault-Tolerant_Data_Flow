@@ -188,7 +188,7 @@ class Task {
         }
 
         for (var d : result) {
-            var task_data = ret.get(d.getValue0() % group_size);
+            var task_data = ret.get(Math.abs(d.getValue0()) % group_size);
             task_data.addData(Data.newBuilder()
                     .setKey(d.getValue0())
                     .setValue(d.getValue1()));
