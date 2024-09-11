@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.net.ConnectException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
@@ -28,14 +29,10 @@ public class Node {
         }
     }
 
-    public Node(Address address) {
-        try {
-            this.conn = new Socket(address.getHost(), address.getPort());
-            this.out = conn.getOutputStream();
-            this.in = conn.getInputStream();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    public Node(Address address) throws IOException, ConnectException {
+        this.conn = new Socket(address.getHost(), address.getPort());
+        this.out = conn.getOutputStream();
+        this.in = conn.getInputStream();
     }
 
     public void send(GeneratedMessageV3 message) throws IOException {
@@ -50,7 +47,7 @@ public class Node {
         out.write(len_plus_data);
     }
 
-    synchronized public <T extends GeneratedMessageV3> T receive(Class<T> clazz, int timeout)
+    public <T extends GeneratedMessageV3> T receive(Class<T> clazz, int timeout)
             throws SocketTimeoutException, IOException {
         conn.setSoTimeout(timeout);
         T ret = null;
@@ -63,7 +60,7 @@ public class Node {
         return ret;
     }
 
-    synchronized public <T extends GeneratedMessageV3> T receive(Class<T> clazz) throws IOException {
+    public <T extends GeneratedMessageV3> T receive(Class<T> clazz) throws IOException {
         byte[] len_bytes = new byte[4];
         if (in.read(len_bytes) != 4) {
             throw new IOException("Unable to read the message length");
@@ -101,7 +98,7 @@ public class Node {
         return t;
     }
 
-    synchronized public <T extends GeneratedMessageV3> T nonBlockReceive(Class<T> clazz) throws IOException {
+    public <T extends GeneratedMessageV3> T nonBlockReceive(Class<T> clazz) throws IOException {
         SocketChannel channel = conn.getChannel();
         byte[] len_bytes = new byte[4];
         int len_bytes_read = channel.read(ByteBuffer.wrap(len_bytes));

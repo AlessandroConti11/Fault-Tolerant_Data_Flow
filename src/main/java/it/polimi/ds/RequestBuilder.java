@@ -1,6 +1,7 @@
 package it.polimi.ds;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
@@ -102,9 +103,9 @@ public class RequestBuilder {
 
     public Request allocate() {
         System.out.println("Allocating resources " + allocators.get(0));
-        Node allocator = new Node(allocators.get(0));
         Address coordinator_address = null;
         try {
+            Node allocator = new Node(allocators.get(0));
             allocator.send(AllocateNodeManagerRequest.newBuilder()
                     .setCoordinator(true)
                     .build());
