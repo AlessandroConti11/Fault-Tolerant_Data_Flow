@@ -726,19 +726,23 @@ public class Coordinator {
                     } catch (SocketTimeoutException e) {
                         if (network_changed) {
                             System.out.println("Sending update network request to " + id);
-                            control_connection.send(
-                                    ControlWorkerRequest
-                                            .newBuilder()
-                                            .setUpdateNetworkRequest(UpdateNetworkRequest.newBuilder()
-                                                    .addAllTaskManagerIds(workers.keySet())
-                                                    .addAllAddresses(workers.values().stream()
-                                                            .map(w -> w.address.toProto())
-                                                            .collect(Collectors.toList()))
-                                                    .build())
-                                            .build());
+                            try {
+                                control_connection.send(
+                                        ControlWorkerRequest
+                                                .newBuilder()
+                                                .setUpdateNetworkRequest(UpdateNetworkRequest.newBuilder()
+                                                        .addAllTaskManagerIds(workers.keySet())
+                                                        .addAllAddresses(workers.values().stream()
+                                                                .map(w -> w.address.toProto())
+                                                                .collect(Collectors.toList()))
+                                                        .build())
+                                                .build());
 
-                            var ok = control_connection.receive(UpdateNetworkResponse.class);
-                            network_changed = false;
+                                var ok = control_connection.receive(UpdateNetworkResponse.class);
+                                network_changed = false;
+                            } catch (IOException ee) {
+                                alive = false;
+                            }
                         }
                     } catch (IOException e) {
                         alive = false;
