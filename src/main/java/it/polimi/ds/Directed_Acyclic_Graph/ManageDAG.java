@@ -679,10 +679,10 @@ public class ManageDAG {
         if (comp.fragments_received.contains(checkpointRequest.getSourceTaskId()))
             return false;
 
-        /// TOOD: This happens when the recovery duplicates some computatino
-        /// accidentally, figure out why that happens and mitigate it. This can just
-        /// ignore this duplication.
-        if (comp.last_checkpoint_group * maxTasksPerGroup > checkpointRequest.getSourceTaskId())
+        /// Make sure it's in the range that we can accept, if not just discard it since
+        /// it will be useless
+        if (!(((comp.last_checkpoint_group - 1) * maxTasksPerGroup) < checkpointRequest.getSourceTaskId() &&
+                checkpointRequest.getSourceTaskId() < ((comp.current_checkpoint_group + 1) * maxTasksPerGroup)))
             return false;
 
         assert comp.fragments_received.size() < maxTasksPerGroup : "Received request for a finished checkpoint "
