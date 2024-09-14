@@ -1,0 +1,9 @@
+filter;not_equal;55
+change_key;add;70
+map;add;13
+filter;lower_or_equal;93
+change_key;add;75
+filter;not_equal;11
+map;mult;77
+filter;not_equal;19
+change_key;add;75

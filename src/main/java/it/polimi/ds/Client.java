@@ -109,6 +109,7 @@ public class Client {
                     data_strings.add(args[i]);
                 }
 
+                System.out.println("ciao " + data_strings.size() + " " + data_strings);
                 if (data_strings.size() == 0) {
                     dataString = insertData();
                 } else {
@@ -118,6 +119,13 @@ public class Client {
                 program = insertProgram();
                 dataString = insertData();
             }
+        }
+
+        if (program == null) {
+            program = insertProgram();
+        }
+        if (dataString == null) {
+            dataString = insertData();
         }
 
         int allocations = -1;
@@ -166,7 +174,8 @@ public class Client {
             System.out.println("\n\nThe result:");
             var resp = request.getResponses();
             for (var r : resp) {
-                System.out.println("Got result for " + r.getComputationId());
+                System.out.println("Got result for " + r.getComputationId() + "\n" +
+                        "File: " + r.getComputationId() + "compute" + counter + ".csv" + "\n\n");
             }
 
             ManageCSVfile.writeCSVresult(request.getResponses(), "compute" + counter + ".csv");
