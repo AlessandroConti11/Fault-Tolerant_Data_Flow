@@ -14,7 +14,7 @@ Tags: `#Apache-Flink`, `#big-data`, `#computer_engineering`, `#distributed_syste
 
 Politecnico di Milano.
 
-Academic Year: 2024/2025.
+Academic Year: 2023/2024.
 
 090950 - Distributed Systems - professor Cugola Giampaolo Saverio - optional project.
 
